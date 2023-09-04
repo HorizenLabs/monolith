@@ -1,1 +1,2 @@
 # monolith-plonky2-internal
+The repository is a clone of the Plonky2 pull request [#888](https://github.com/mir-protocol/plonky2/pull/888) (logUp) with minor adjustments. Further, it includes both the plain implementation and a gate for the [Monolith hash function](https://eprint.iacr.org/2023/1025.pdf).
