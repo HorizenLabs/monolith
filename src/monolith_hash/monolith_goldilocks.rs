@@ -1,5 +1,6 @@
 use plonky2::field::extension::quadratic::QuadraticExtension;
 use plonky2::field::goldilocks_field::GoldilocksField;
+use plonky2::hash::poseidon::PoseidonHash;
 use plonky2::plonk::config::GenericConfig;
 use crate::monolith_hash::{Monolith, MonolithHash, N_ROUNDS, SPONGE_WIDTH};
 use crate::monolith_hash::monolith_goldilocks::monolith_mds_12::mds_multiply_u128;
@@ -229,13 +230,26 @@ impl GenericConfig<2> for MonolithGoldilocksConfig {
     type F = GoldilocksField;
     type FE = QuadraticExtension<Self::F>;
     type Hasher = MonolithHash;
-    type InnerHasher = MonolithHash;
+    type InnerHasher = PoseidonHash;
 }
 
 #[cfg(test)]
 mod tests {
+    use std::cmp;
+    use plonky2::field::extension::Extendable;
     use plonky2::field::goldilocks_field::GoldilocksField;
+    use plonky2::gates::gate::Gate;
+    use plonky2::hash::hash_types::RichField;
+    use plonky2::hash::poseidon::PoseidonHash;
+    use plonky2::plonk::circuit_data::CircuitConfig;
+    use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, Hasher, PoseidonGoldilocksConfig};
     use crate::monolith_hash::test::check_test_vectors;
+    use rstest::rstest;
+    use serial_test::serial;
+    use crate::gates::monolith::MonolithGate;
+    use crate::monolith_hash::gadget::tests::{prove_circuit_with_hash, recursive_proof, test_monolith_hash_circuit};
+    use crate::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
+    use crate::monolith_hash::{Monolith, MonolithHash};
 
     #[test]
     fn test_vectors() {
@@ -249,5 +263,88 @@ mod tests {
         ];
 
         check_test_vectors::<GoldilocksField>(test_vectors12);
+    }
+
+    fn generate_config<
+        F: RichField + Extendable<D> + Monolith,
+        const D: usize,
+    >() -> CircuitConfig {
+        let needed_wires = cmp::max(MonolithGate::<F,D>::new().num_wires(), CircuitConfig::standard_recursion_config().num_wires);
+        CircuitConfig {
+            num_wires: needed_wires,
+            num_routed_wires: needed_wires,
+            ..CircuitConfig::standard_recursion_config()
+        }
+    }
+
+    #[rstest]
+    #[serial]
+    fn test_circuit_with_hash_functions
+    <
+        F: RichField + Monolith + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        H: Hasher<F> + AlgebraicHasher<F>,
+        const D: usize,
+    >
+    (
+        #[values(PoseidonGoldilocksConfig, MonolithGoldilocksConfig)] _c: C,
+        #[values(PoseidonHash, MonolithHash)] _h: H,
+    ) {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let config = generate_config::<F,D>();
+
+        let (cd, proof) = prove_circuit_with_hash::<F, C, D, H>(
+            config,
+            4096,
+            _h,
+            true
+        ).unwrap();
+
+        cd.verify(proof).unwrap()
+    }
+
+    #[rstest]
+    #[serial]
+    fn test_recursive_circuit_with_hash_functions<
+        F: RichField + Monolith + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        InnerC: GenericConfig<D, F = F>,
+        const D: usize,
+    >(
+        #[values(PoseidonGoldilocksConfig{}, MonolithGoldilocksConfig{})] _c: C,
+        #[values(PoseidonGoldilocksConfig{}, MonolithGoldilocksConfig{})] _inner: InnerC,
+    )
+        where C::Hasher: AlgebraicHasher<F>,
+              InnerC::Hasher: AlgebraicHasher<F>,
+    {
+        let config = generate_config::<F,D>();
+
+        let (cd, proof) = prove_circuit_with_hash::<F, InnerC, D, _>(
+            config,
+            1024,
+            PoseidonHash {},
+            false,
+        ).unwrap();
+
+        println!("base proof generated");
+
+        println!("base circuit size: {}", cd.common.degree_bits());
+
+        let (rec_cd, rec_proof) =
+            recursive_proof::<F, C, InnerC, D>(proof, &cd, &cd.common.config).unwrap();
+
+        println!("recursive proof generated, recursion circuit size: {}", rec_cd.common.degree_bits());
+
+        rec_cd.verify(rec_proof).unwrap();
+    }
+
+    #[test]
+    fn test_monolith_hash() {
+        const D: usize = 2;
+        type C = MonolithGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+        let config = generate_config::<F,D>();
+        test_monolith_hash_circuit::<F,C,D>(config)
     }
 }

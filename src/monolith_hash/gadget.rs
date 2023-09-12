@@ -1,4 +1,6 @@
+use std::sync::Arc;
 use plonky2::field::extension::Extendable;
+use plonky2::gates::lookup_table::LookupTable;
 use plonky2::hash::hash_types::RichField;
 use plonky2::hash::hashing::PlonkyPermutation;
 use plonky2::iop::generator::{GeneratedValues, SimpleGenerator};
@@ -103,7 +105,7 @@ impl<F: RichField + Monolith> AlgebraicHasher<F> for MonolithHash {
         where
             F: RichField + Extendable<D>,
     {
-        let lut_index = add_lookup_table(builder);
+        let lut_index = add_monolith_lookup_table(builder);
         let gate_type = MonolithGate::<F, D>::new();
         let gate = builder.add_gate(gate_type, vec![]);
 
@@ -136,67 +138,76 @@ impl<F: RichField + Monolith> AlgebraicHasher<F> for MonolithHash {
     }
 }
 
-pub fn add_lookup_table<F: RichField + Extendable<D>, const D:usize>(
+pub(crate) fn add_monolith_lookup_table<F: RichField + Extendable<D>, const D:usize>(
     builder: &mut CircuitBuilder<F,D>
 ) -> usize {
-    // Add lookup table
-    // TODO: Find a more elegant way to generate the table. Moreover, this should be done only once...
-    let inp_table: [u16; LOOKUP_SIZE] = core::array::from_fn(|i| i as u16);
-    builder.add_lookup_table_from_fn(|i| {
-        let limb = i as u16;
-        match LOOKUP_BITS {
-            8 => {
-                let limbl1 = ((!limb & 0x80) >> 7) | ((!limb & 0x7F) << 1); // Left rotation by 1
-                let limbl2 = ((limb & 0xC0) >> 6) | ((limb & 0x3F) << 2); // Left rotation by 2
-                let limbl3 = ((limb & 0xE0) >> 5) | ((limb & 0x1F) << 3); // Left rotation by 3
+    // Add lookup table for Monolith. To ensure that the big lookup-table of Monolith is computed
+    // and added to the builder only the first time this function is called, we employ a fake small
+    // lookup-table to the circuit builder: if such a fake table is not available, then we compute
+    // and add the big Monolith table; otherwise, we skip the computation of the Monolith table and
+    // we simply return its index
+    let fake_table: LookupTable = Arc::new(vec![(0u16,0u16)]);
+    if let Some(idx) = builder.is_stored(fake_table.clone()) {
+        idx + 1
+    } else {
+        let fake_idx = builder.add_lookup_table_from_pairs(fake_table);
+        // use fake lut in order to avoid errors when generating constraints
+        let zero = builder.zero();
+        builder.add_lookup_from_index(zero, fake_idx);
+        let inp_table: [u16; LOOKUP_SIZE] = core::array::from_fn(|i| i as u16);
+        let idx = builder.add_lookup_table_from_fn(|i| {
+            let limb = i as u16;
+            match LOOKUP_BITS {
+                8 => {
+                    let limbl1 = ((!limb & 0x80) >> 7) | ((!limb & 0x7F) << 1); // Left rotation by 1
+                    let limbl2 = ((limb & 0xC0) >> 6) | ((limb & 0x3F) << 2); // Left rotation by 2
+                    let limbl3 = ((limb & 0xE0) >> 5) | ((limb & 0x1F) << 3); // Left rotation by 3
 
-                // y_i = x_i + (1 + x_{i+1}) * x_{i+2} * x_{i+3}
-                let tmp = limb ^ limbl1 & limbl2 & limbl3;
-                ((tmp & 0x80) >> 7) | ((tmp & 0x7F) << 1)
-            },
-            16 => {
-                let limbl1 = ((!limb & 0x8000) >> 15) | ((!limb & 0x7FFF) << 1); // Left rotation by 1
-                let limbl2 = ((limb & 0xC000) >> 14) | ((limb & 0x3FFF) << 2); // Left rotation by 2
-                let limbl3 = ((limb & 0xE000) >> 13) | ((limb & 0x1FFF) << 3); // Left rotation by 3
+                    // y_i = x_i + (1 + x_{i+1}) * x_{i+2} * x_{i+3}
+                    let tmp = limb ^ limbl1 & limbl2 & limbl3;
+                    ((tmp & 0x80) >> 7) | ((tmp & 0x7F) << 1)
+                },
+                16 => {
+                    let limbl1 = ((!limb & 0x8000) >> 15) | ((!limb & 0x7FFF) << 1); // Left rotation by 1
+                    let limbl2 = ((limb & 0xC000) >> 14) | ((limb & 0x3FFF) << 2); // Left rotation by 2
+                    let limbl3 = ((limb & 0xE000) >> 13) | ((limb & 0x1FFF) << 3); // Left rotation by 3
 
-                // y_i = x_i + (1 + x_{i+1}) * x_{i+2} * x_{i+3}
-                let tmp = limb ^ limbl1 & limbl2 & limbl3;
-                ((tmp & 0x8000) >> 15) | ((tmp & 0x7FFF) << 1) // Final rotation
+                    // y_i = x_i + (1 + x_{i+1}) * x_{i+2} * x_{i+3}
+                    let tmp = limb ^ limbl1 & limbl2 & limbl3;
+                    ((tmp & 0x8000) >> 15) | ((tmp & 0x7FFF) << 1) // Final rotation
+                }
+                _ => {
+                    panic!("Unsupported lookup size");
+                }
             }
-            _ => {
-                panic!("Unsupported lookup size");
-            }
-        }
-    }, &inp_table)
+        }, &inp_table);
+        assert_eq!(fake_idx + 1, idx);
+        idx
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use std::cmp;
-    use plonky2::field::types::Field;
-    use plonky2::gates::gate::Gate;
+pub(crate) mod tests {
+    use anyhow::Result;
+    use log::{info, Level};
+    use plonky2::field::extension::Extendable;
+    use plonky2::hash::hash_types::RichField;
     use plonky2::hash::hashing::PlonkyPermutation;
     use plonky2::iop::target::Target;
     use plonky2::iop::witness::{PartialWitness, WitnessWrite};
     use plonky2::plonk::circuit_builder::CircuitBuilder;
-    use plonky2::plonk::circuit_data::CircuitConfig;
-    use plonky2::plonk::config::{AlgebraicHasher, GenericConfig};
-    use crate::gates::monolith::MonolithGate;
+    use plonky2::plonk::circuit_data::{CircuitConfig, CircuitData};
+    use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, Hasher};
+    use plonky2::plonk::proof::ProofWithPublicInputs;
+    use plonky2::plonk::prover::prove;
+    use plonky2::util::timing::TimingTree;
     use crate::monolith_hash::{Monolith, MonolithHash, MonolithPermutation, SPONGE_WIDTH};
-    use crate::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
 
-    fn test_monolith_hash_circuit() {
-        const D: usize = 2;
-        type C = MonolithGoldilocksConfig;
-        type F = <C as GenericConfig<D>>::F;
-
-        let needed_wires = cmp::max(MonolithGate::<F,D>::new().num_wires(), CircuitConfig::standard_recursion_config().num_wires);
-        let config = CircuitConfig {
-            num_wires: needed_wires,
-            num_routed_wires: needed_wires,
-            ..CircuitConfig::standard_recursion_config()
-        };
-
+    pub(crate) fn test_monolith_hash_circuit<
+        F: RichField + Extendable<D> + Monolith,
+        C: GenericConfig<D, F=F>,
+        const D: usize,
+    >(config: CircuitConfig) {
         let mut builder = CircuitBuilder::new(config);
 
         let inp_targets_array = builder.add_virtual_target_arr::<SPONGE_WIDTH>();
@@ -239,8 +250,118 @@ mod tests {
         println!("[Verify time] {:.4} s", now.elapsed().as_secs_f64());
     }
 
-    #[test]
-    fn test_monolith_hash() {
-        test_monolith_hash_circuit()
+    pub(crate) fn prove_circuit_with_hash<
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        const D: usize,
+        H: Hasher<F> + AlgebraicHasher<F>,
+    >(
+        config: CircuitConfig,
+        num_ops: usize,
+        _hasher: H,
+        print_timing: bool,
+    ) -> Result<(CircuitData<F, C, D>, ProofWithPublicInputs<F, C, D>)>
+    {
+        let mut builder = CircuitBuilder::<F, D>::new(config);
+        let init_t = builder.add_virtual_public_input();
+        let mut res_t = builder.add_virtual_target();
+        builder.connect(init_t, res_t);
+        let hash_targets = (0..SPONGE_WIDTH - 1)
+            .map(|_| builder.add_virtual_target())
+            .collect::<Vec<_>>();
+        for _ in 0..num_ops {
+            res_t = builder.mul(res_t, res_t);
+            let mut to_be_hashed_elements = vec![res_t];
+            to_be_hashed_elements.extend_from_slice(hash_targets.as_slice());
+            res_t = builder
+                .hash_or_noop::<H>(to_be_hashed_elements)
+                .elements[0]
+        }
+        let out_t = builder.add_virtual_public_input();
+        let is_eq_t = builder.is_equal(out_t, res_t);
+        builder.assert_one(is_eq_t.target);
+
+        let data = builder.build::<C>();
+
+
+        let mut pw = PartialWitness::<F>::new();
+        let input = F::rand();
+        pw.set_target(init_t, input);
+
+        let input_hash_elements = hash_targets
+            .iter()
+            .map(|&hash_t| {
+                let elem = F::rand();
+                pw.set_target(hash_t, elem);
+                elem
+            })
+            .collect::<Vec<_>>();
+
+        let mut res = input;
+        for _ in 0..num_ops {
+            res = res.mul(res);
+            let mut to_be_hashed_elements = vec![res];
+            to_be_hashed_elements.extend_from_slice(input_hash_elements.as_slice());
+            res = H::hash_no_pad(to_be_hashed_elements.as_slice()).elements[0]
+        }
+
+        pw.set_target(out_t, res);
+
+        let proof = if print_timing {
+            let mut timing = TimingTree::new("prove", Level::Debug);
+            let proof = prove(&data.prover_only, &data.common, pw, &mut timing)?;
+            timing.print();
+            let proof_bytes = serde_cbor::to_vec(&proof).unwrap();
+            info!("proof size: {}", proof_bytes.len());
+            proof
+        } else {
+            data.prove(pw)?
+        };
+
+        assert_eq!(proof.public_inputs[0], input);
+        assert_eq!(proof.public_inputs[1], res);
+
+        Ok((data, proof))
+    }
+
+    pub(crate) fn recursive_proof<
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        InnerC: GenericConfig<D, F = F>,
+        const D: usize,
+    >(
+        inner_proof: ProofWithPublicInputs<F, InnerC, D>,
+        inner_cd: &CircuitData<F, InnerC, D>,
+        config: &CircuitConfig,
+    ) -> Result<(CircuitData<F, C, D>, ProofWithPublicInputs<F, C, D>)>
+    where C::Hasher: AlgebraicHasher<F>,
+    InnerC::Hasher: AlgebraicHasher<F>,
+    {
+        let mut builder = CircuitBuilder::<F, D>::new(config.clone());
+        let mut pw = PartialWitness::new();
+        let pt = builder.add_virtual_proof_with_pis(&inner_cd.common);
+        pw.set_proof_with_pis_target(&pt, &inner_proof);
+
+        let inner_data =
+            builder.add_virtual_verifier_data(inner_cd.common.config.fri_config.cap_height);
+        pw.set_cap_target(
+            &inner_data.constants_sigmas_cap,
+            &inner_cd.verifier_only.constants_sigmas_cap,
+        );
+        pw.set_hash_target(
+            inner_data.circuit_digest,
+            inner_cd.verifier_only.circuit_digest,
+        );
+
+        for &pi_t in pt.public_inputs.iter() {
+            let t = builder.add_virtual_public_input();
+            builder.connect(pi_t, t);
+        }
+        builder.verify_proof::<InnerC>(&pt, &inner_data, &inner_cd.common);
+        let data = builder.build::<C>();
+
+        let proof = data.prove(pw)?;
+
+        Ok((data, proof))
     }
 }

@@ -42,7 +42,7 @@ pub const NUM_BARS: usize = 4;
 pub const N_ROUNDS: usize = 6;
 pub const LOOKUP_BITS: usize = 8;
 pub const LOOKUP_SIZE: usize = 1 << LOOKUP_BITS;
-pub const LOOKUP_NUM_LIMBS: usize = 64;
+pub const LOOKUP_NUM_LIMBS: usize = 64 / LOOKUP_BITS;
 
 #[inline]
 pub(crate) fn split(x: u128) -> (u64, u32) {
