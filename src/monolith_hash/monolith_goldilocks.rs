@@ -236,6 +236,7 @@ impl GenericConfig<2> for MonolithGoldilocksConfig {
 #[cfg(test)]
 mod tests {
     use std::cmp;
+    use std::marker::PhantomData;
     use plonky2::field::extension::Extendable;
     use plonky2::field::goldilocks_field::GoldilocksField;
     use plonky2::gates::gate::Gate;
@@ -265,7 +266,7 @@ mod tests {
         check_test_vectors::<GoldilocksField>(test_vectors12);
     }
 
-    fn generate_config<
+    fn generate_config_for_monolith<
         F: RichField + Extendable<D> + Monolith,
         const D: usize,
     >() -> CircuitConfig {
@@ -275,6 +276,14 @@ mod tests {
             num_routed_wires: needed_wires,
             ..CircuitConfig::standard_recursion_config()
         }
+    }
+
+    // helper struct employed to bind a Hasher implementation `H` with the circuit configuration to
+    // be employed to build the circuit when such Hasher `H` is employed in the circuit
+    struct HasherConfig<const D: usize, F: RichField + Monolith + Extendable<D>, H: Hasher<F> + AlgebraicHasher<F>> {
+        field: PhantomData<F>,
+        hasher: PhantomData<H>,
+        circuit_config: CircuitConfig,
     }
 
     #[rstest]
@@ -288,21 +297,33 @@ mod tests {
     >
     (
         #[values(PoseidonGoldilocksConfig, MonolithGoldilocksConfig)] _c: C,
-        #[values(PoseidonHash, MonolithHash)] _h: H,
+        #[values(HasherConfig::<2, GoldilocksField, PoseidonHash> {
+        field: PhantomData::default(),
+        hasher: PhantomData::default(),
+        circuit_config: CircuitConfig::standard_recursion_config(),
+        }, HasherConfig::<2, GoldilocksField , MonolithHash> {
+        field: PhantomData::default(),
+        hasher: PhantomData::default(),
+        circuit_config: generate_config_for_monolith::<GoldilocksField,2>(),
+        })] config: HasherConfig<D, F, H>,
     ) {
         let _ = env_logger::builder().is_test(true).try_init();
 
-        let config = generate_config::<F,D>();
-
         let (cd, proof) = prove_circuit_with_hash::<F, C, D, H>(
-            config,
+            config.circuit_config,
             4096,
-            _h,
             true
         ).unwrap();
 
         cd.verify(proof).unwrap()
     }
+    // helper struct employed to bind a GenericConfig `C` with the circuit configuration
+    // to be employed to build the circuit when such `C` is employed in the circuit
+    struct HashConfig<const D: usize, C: GenericConfig<D>> {
+        gen_config: PhantomData<C>,
+        circuit_config: CircuitConfig,
+    }
+
 
     #[rstest]
     #[serial]
@@ -312,18 +333,22 @@ mod tests {
         InnerC: GenericConfig<D, F = F>,
         const D: usize,
     >(
-        #[values(PoseidonGoldilocksConfig{}, MonolithGoldilocksConfig{})] _c: C,
-        #[values(PoseidonGoldilocksConfig{}, MonolithGoldilocksConfig{})] _inner: InnerC,
+        #[values(PoseidonGoldilocksConfig, MonolithGoldilocksConfig)] _c: C,
+        #[values(HashConfig::<2, PoseidonGoldilocksConfig> {
+        gen_config: PhantomData::default(),
+        circuit_config: CircuitConfig::standard_recursion_config(),
+        }, HashConfig::<2, MonolithGoldilocksConfig> {
+        gen_config: PhantomData::default(),
+        circuit_config: generate_config_for_monolith::<GoldilocksField,2>(),
+        })] inner_conf: HashConfig<D, InnerC>,
     )
         where C::Hasher: AlgebraicHasher<F>,
               InnerC::Hasher: AlgebraicHasher<F>,
     {
-        let config = generate_config::<F,D>();
 
-        let (cd, proof) = prove_circuit_with_hash::<F, InnerC, D, _>(
-            config,
-            1024,
-            PoseidonHash {},
+        let (cd, proof) = prove_circuit_with_hash::<F, InnerC, D, PoseidonHash>(
+            CircuitConfig::standard_recursion_config(),
+            2048,
             false,
         ).unwrap();
 
@@ -332,7 +357,7 @@ mod tests {
         println!("base circuit size: {}", cd.common.degree_bits());
 
         let (rec_cd, rec_proof) =
-            recursive_proof::<F, C, InnerC, D>(proof, &cd, &cd.common.config).unwrap();
+            recursive_proof::<F, C, InnerC, D>(proof, &cd, &inner_conf.circuit_config).unwrap();
 
         println!("recursive proof generated, recursion circuit size: {}", rec_cd.common.degree_bits());
 
@@ -344,7 +369,7 @@ mod tests {
         const D: usize = 2;
         type C = MonolithGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        let config = generate_config::<F,D>();
+        let config = generate_config_for_monolith::<F,D>();
         test_monolith_hash_circuit::<F,C,D>(config)
     }
 }

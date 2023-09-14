@@ -258,7 +258,6 @@ pub(crate) mod tests {
     >(
         config: CircuitConfig,
         num_ops: usize,
-        _hasher: H,
         print_timing: bool,
     ) -> Result<(CircuitData<F, C, D>, ProofWithPublicInputs<F, C, D>)>
     {
