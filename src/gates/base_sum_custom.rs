@@ -17,7 +17,7 @@ use plonky2::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase
 use plonky2::util::log_floor;
 use plonky2::util::serialization::{Buffer, IoResult, Read, Write};
 
-/// A gate which can decompose an element of a field F into base B little-endian limbs.
+/// A gate which can decompose an element of `GoldilocksField` into base B little-endian limbs.
 /// This gate is customized to be used for lookups of the Monolith hash function, and thus it has
 /// the following differences w.r.t. the `BaseSum` gate:
 /// - It allows to pack many instances of a decomposition gate on a single row
@@ -77,7 +77,6 @@ impl<const B: usize> BaseSumCustomGate<B> {
     }
 }
 
-
 impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D> for BaseSumCustomGate<B> {
     fn id(&self) -> String {
         format!("{self:?} + Base: {B}")
@@ -111,18 +110,25 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D> fo
             let z = vars.local_wires[self.ith_wire_sum(i) + self.num_limbs + 1];
             let z_prime = vars.local_wires[self.ith_wire_sum(i) + self.num_limbs + 2];
 
-            let one = F::Extension::from_canonical_usize(1_u64 as usize);
-            let two_8 = F::Extension::from_canonical_usize((1_u64 << 8) as usize);
-            let two_16 = F::Extension::from_canonical_usize((1_u64 << 16) as usize);
-            let two_24 = F::Extension::from_canonical_usize((1_u64 << 24) as usize);
+
+            assert_eq!(limbs.len() % 2, 0);
+
+            let base = F::Extension::from_canonical_usize(B);
+            let half_len = limbs.len()/2;
+            let a = limbs.iter().take(half_len-1).rev().fold(limbs[half_len-1], |acc, el| {
+                acc*base + *el
+            });
+            let temp = limbs.iter().rev().skip(1).take(half_len-1).fold(limbs[limbs.len()-1], |acc, el| {
+                acc*base + *el
+            });
+            let b =  temp - z;
+
             let two_32_m1 = F::Extension::from_canonical_usize(((1_u64 << 32) - 1) as usize);
 
-            let a = limbs[3] * two_24 + limbs[2] * two_16 + limbs[1] * two_8 + limbs[0];
-            let b = limbs[7] * two_24 + limbs[6] * two_16 + limbs[5] * two_8 + limbs[4] - z;
-
             constraints.push(a * b);
-            constraints.push((z - two_32_m1) * z_prime - one);
+            constraints.push((z - two_32_m1) * z_prime - z);
         }
+
         constraints
     }
 
@@ -148,27 +154,26 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D> fo
             let z = vars.local_wires[self.ith_wire_sum(i) + self.num_limbs + 1];
             let z_prime = vars.local_wires[self.ith_wire_sum(i) + self.num_limbs + 2];
 
-            let one = builder.one_extension();
-            let two_8 = F::from_canonical_usize((1_u64 << 8) as usize);
-            let two_16 = F::from_canonical_usize((1_u64 << 16) as usize);
-            let two_24 = F::from_canonical_usize((1_u64 << 24) as usize);
-            let two_32_m1 = builder.constant_extension(F::Extension::from_canonical_usize(((1_u64 << 32) - 1) as usize));
+            assert_eq!(limbs.len() % 2, 0);
 
-            let mut temp = builder.mul_const_add_extension(two_8, limbs[1], limbs[0]);
-            temp = builder.mul_const_add_extension(two_16, limbs[2], temp);
-            let a = builder.mul_const_add_extension(two_24, limbs[3], temp);
-
-            let mut temp = builder.mul_const_add_extension(two_8, limbs[5], limbs[4]);
-            temp = builder.mul_const_add_extension(two_16, limbs[6], temp);
-            temp = builder.mul_const_add_extension(two_24, limbs[7], temp);
+            let base = F::from_canonical_usize(B);
+            let half_len = limbs.len()/2;
+            let a = limbs.iter().take(half_len-1).rev().fold(limbs[half_len-1], |acc, el| {
+                builder.mul_const_add_extension(base, acc, *el)
+            });
+            let temp = limbs.iter().rev().skip(1).take(half_len-1).fold(limbs[limbs.len()-1], |acc, el| {
+                builder.mul_const_add_extension(base, acc, *el)
+            });
             let b = builder.sub_extension(temp, z);
 
-            temp = builder.mul_extension(a, b);
+            let two_32_m1 = builder.constant_extension(F::Extension::from_canonical_usize(((1_u64 << 32) - 1) as usize));
+
+            let temp = builder.mul_extension(a, b);
             constraints.push(temp);
 
-            temp = builder.sub_extension(z, two_32_m1);
+            let mut temp = builder.sub_extension(z, two_32_m1);
             temp = builder.mul_extension(temp, z_prime);
-            temp = builder.sub_extension(temp, one);
+            temp = builder.sub_extension(temp, z);
             constraints.push(temp);
         }
         constraints
@@ -226,16 +231,22 @@ for BaseSumCustomGate<B>
             let z = vars.local_wires[self.ith_wire_sum(i) + self.num_limbs + 1];
             let z_prime = vars.local_wires[self.ith_wire_sum(i) + self.num_limbs + 2];
 
-            let two_8 = F::from_canonical_usize((1_u64 << 8) as usize);
-            let two_16 = F::from_canonical_usize((1_u64 << 16) as usize);
-            let two_24 = F::from_canonical_usize((1_u64 << 24) as usize);
+            assert_eq!(limbs.len() % 2, 0);
+
+            let base = F::from_canonical_usize(B);
+            let half_len = limbs.len()/2;
+            let a = (0..half_len-1).into_iter().rev().fold(limbs[half_len-1], |acc, i| {
+                acc*base + limbs[i]
+            });
+            let temp = (half_len..limbs.len()-1).into_iter().rev().fold(limbs[limbs.len()-1], |acc, i| {
+                acc*base + limbs[i]
+            });
+            let b = temp - z;
+
             let two_32_m1 = F::from_canonical_usize(((1_u64 << 32) - 1) as usize);
 
-            let a = limbs[3] * two_24 + limbs[2] * two_16 + limbs[1] * two_8 + limbs[0];
-            let b = limbs[7] * two_24 + limbs[6] * two_16 + limbs[5] * two_8 + limbs[4] - z;
-
             yield_constr.one(a * b);
-            yield_constr.one((z - two_32_m1) * z_prime - F::ONE);
+            yield_constr.one((z - two_32_m1) * z_prime - z);
         }
     }
 }
@@ -305,8 +316,16 @@ for BaseSplitGenerator<B>
             })
             .collect::<Vec<_>>();
 
-        let a = limbs_value[3] * F::from_canonical_u64(1_u64 << 24) + limbs_value[2] * F::from_canonical_u64(1_u64 << 16) + limbs_value[1] * F::from_canonical_u64(1_u64 << 8) + limbs_value[0];
-        let b = limbs_value[7] * F::from_canonical_u64(1_u64 << 24) + limbs_value[6] * F::from_canonical_u64(1_u64 << 16) + limbs_value[5] * F::from_canonical_u64(1_u64 << 8) + limbs_value[4];
+        assert_eq!(limbs_value.len() % 2, 0);
+
+        let base = F::from_canonical_usize(B);
+        let half_len = limbs_value.len()/2;
+        let a = limbs_value.iter().take(half_len-1).rev().fold(limbs_value[half_len-1], |acc, el| {
+            acc*base + *el
+        });
+        let b = limbs_value.iter().rev().skip(1).take(half_len-1).fold(limbs_value[limbs.len()-1], |acc, el| {
+            acc*base + *el
+        });
 
         let z_field: F;
         if a == F::ZERO {
@@ -315,9 +334,11 @@ for BaseSplitGenerator<B>
         else {
             z_field = b;
         }
-        let z_prime_field = F::inverse(&(z_field - F::from_canonical_u64(1_u64 << 32) + F::ONE));
+        let z_prime_field = F::inverse(&(z_field - F::from_canonical_u64(1_u64 << 32) + F::ONE))*z_field;
         out_buffer.set_target(self.boundary_constraints_wires()[0], z_field);
         out_buffer.set_target(self.boundary_constraints_wires()[1], z_prime_field);
+
+        assert_eq!(z_prime_field*(z_field - F::from_canonical_u64(1_u64 << 32) + F::ONE), z_field);
     }
 
     fn serialize(&self, dst: &mut Vec<u8>, _common_data: &CommonCircuitData<F, D>) -> IoResult<()> {
@@ -342,10 +363,11 @@ mod tests {
     use plonky2::plonk::circuit_data::CircuitConfig;
     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
     use crate::gates::base_sum_custom::BaseSumCustomGate;
+    use crate::monolith_hash::{LOOKUP_NUM_LIMBS, LOOKUP_SIZE};
 
     #[test]
     fn low_degree() {
-        test_low_degree::<GoldilocksField, _, 4>(BaseSumCustomGate::<256>::new(8, &CircuitConfig::standard_recursion_config()))
+        test_low_degree::<GoldilocksField, _, 4>(BaseSumCustomGate::<{ LOOKUP_SIZE }>::new(LOOKUP_NUM_LIMBS, &CircuitConfig::standard_recursion_config()))
     }
 
     #[test]
@@ -353,6 +375,6 @@ mod tests {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        test_eval_fns::<F, C, _, D>(BaseSumCustomGate::<256>::new(8, &CircuitConfig::standard_recursion_config()))
+        test_eval_fns::<F, C, _, D>(BaseSumCustomGate::<{ LOOKUP_SIZE }>::new(LOOKUP_NUM_LIMBS, &CircuitConfig::standard_recursion_config()))
     }
 }
