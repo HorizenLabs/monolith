@@ -247,20 +247,18 @@ impl GenericConfig<2> for MonolithGoldilocksConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::cmp;
     use std::marker::PhantomData;
     use plonky2::field::extension::Extendable;
     use plonky2::field::goldilocks_field::GoldilocksField;
-    use plonky2::gates::gate::Gate;
     use plonky2::hash::hash_types::RichField;
     use plonky2::hash::poseidon::PoseidonHash;
     use plonky2::plonk::circuit_data::CircuitConfig;
     use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, Hasher, PoseidonGoldilocksConfig};
+    use crate::gates::generate_config_for_monolith_gate;
     use crate::monolith_hash::test::check_test_vectors;
     use rstest::rstest;
     use serial_test::serial;
-    use crate::gates::monolith::MonolithGate;
-    use crate::monolith_hash::gadget::tests::{prove_circuit_with_hash, recursive_proof, test_monolith_hash_circuit};
+    use crate::gates::gadget::tests::{prove_circuit_with_hash, recursive_proof, test_monolith_hash_circuit};
     use crate::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
     use crate::monolith_hash::{LOOKUP_BITS, Monolith, MonolithHash};
 
@@ -283,18 +281,6 @@ mod tests {
         };
 
         check_test_vectors::<GoldilocksField>(test_vectors12);
-    }
-
-    fn generate_config_for_monolith<
-        F: RichField + Extendable<D> + Monolith,
-        const D: usize,
-    >() -> CircuitConfig {
-        let needed_wires = cmp::max(MonolithGate::<F,D>::new().num_wires(), CircuitConfig::standard_recursion_config().num_wires);
-        CircuitConfig {
-            num_wires: needed_wires,
-            num_routed_wires: needed_wires,
-            ..CircuitConfig::standard_recursion_config()
-        }
     }
 
     // helper struct employed to bind a Hasher implementation `H` with the circuit configuration to
@@ -323,7 +309,7 @@ mod tests {
         }, HasherConfig::<2, GoldilocksField , MonolithHash> {
         field: PhantomData::default(),
         hasher: PhantomData::default(),
-        circuit_config: generate_config_for_monolith::<GoldilocksField,2>(),
+        circuit_config: generate_config_for_monolith_gate::<GoldilocksField,2>(),
         })] config: HasherConfig<D, F, H>,
     ) {
         let _ = env_logger::builder().is_test(true).try_init();
@@ -358,7 +344,7 @@ mod tests {
         circuit_config: CircuitConfig::standard_recursion_config(),
         }, HashConfig::<2, MonolithGoldilocksConfig> {
         gen_config: PhantomData::default(),
-        circuit_config: generate_config_for_monolith::<GoldilocksField,2>(),
+        circuit_config: generate_config_for_monolith_gate::<GoldilocksField,2>(),
         })] inner_conf: HashConfig<D, InnerC>,
     )
         where C::Hasher: AlgebraicHasher<F>,
@@ -389,7 +375,7 @@ mod tests {
         const D: usize = 2;
         type C = MonolithGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        let config = generate_config_for_monolith::<F,D>();
+        let config = generate_config_for_monolith_gate::<F,D>();
         let _ = env_logger::builder().is_test(true).try_init();
         test_monolith_hash_circuit::<F,C,D>(config)
     }

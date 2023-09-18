@@ -1,8 +1,6 @@
-use std::cmp;
 use std::marker::PhantomData;
 use anyhow::Result;
 use plonky2::field::extension::Extendable;
-use plonky2::gates::gate::Gate;
 use plonky2::hash::hash_types::RichField;
 use plonky2::hash::hashing::hash_n_to_m_no_pad;
 use plonky2::iop::target::Target;
@@ -11,20 +9,6 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::circuit_data::{CircuitConfig, CircuitData};
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, Hasher};
 use plonky2::plonk::proof::ProofWithPublicInputs;
-use monolith::gates::monolith::MonolithGate;
-use monolith::monolith_hash::Monolith;
-
-pub fn generate_config_for_monolith<
-    F: RichField + Extendable<D> + Monolith,
-    const D: usize,
->() -> CircuitConfig {
-    let needed_wires = cmp::max(MonolithGate::<F,D>::new().num_wires(), CircuitConfig::standard_recursion_config().num_wires);
-    CircuitConfig {
-        num_wires: needed_wires,
-        num_routed_wires: needed_wires,
-        ..CircuitConfig::standard_recursion_config()
-    }
-}
 
 /// Data structure with all input/output targets and the `CircuitData` for the circuit proven
 /// in base proofs. The circuit is designed to be representative of a common base circuit

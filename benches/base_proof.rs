@@ -1,13 +1,15 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use monolith::gates::generate_config_for_monolith_gate;
 use plonky2::field::extension::Extendable;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::hash::hash_types::RichField;
 use plonky2::hash::poseidon::PoseidonHash;
+use plonky2::plonk::circuit_data::CircuitConfig;
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, Hasher, PoseidonGoldilocksConfig};
 use tynm::type_name;
 use monolith::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
 use monolith::monolith_hash::{Monolith, MonolithHash};
-use crate::circuits::{BaseCircuit, generate_config_for_monolith};
+use crate::circuits::BaseCircuit;
 
 mod circuits;
 
@@ -25,6 +27,7 @@ fn bench_base_proof<
     H: Hasher<F> + AlgebraicHasher<F>,
 >(
     c: &mut Criterion,
+    config: CircuitConfig,
 )
 {
     let mut group = c.benchmark_group(&format!(
@@ -33,7 +36,6 @@ fn bench_base_proof<
         type_name::<H>()
     ));
 
-    let config = generate_config_for_monolith::<F,D>();
     for log_num_hashes in [11, 13, 15] {
         group.bench_function(
             format!("build circuit for 2^{} hashes", log_num_hashes).as_str(),
@@ -77,10 +79,10 @@ fn bench_base_proof<
 fn benchmark(c: &mut Criterion) {
     const D: usize = 2;
     type F = GoldilocksField;
-    bench_base_proof::<F, D, PoseidonGoldilocksConfig, PoseidonHash>(c);
-    bench_base_proof::<F, D, MonolithGoldilocksConfig, PoseidonHash>(c);
-    bench_base_proof::<F, D, PoseidonGoldilocksConfig, MonolithHash>(c);
-    bench_base_proof::<F, D, MonolithGoldilocksConfig, MonolithHash>(c);
+    bench_base_proof::<F, D, PoseidonGoldilocksConfig, PoseidonHash>(c, CircuitConfig::standard_recursion_config());
+    bench_base_proof::<F, D, MonolithGoldilocksConfig, PoseidonHash>(c, CircuitConfig::standard_recursion_config());
+    bench_base_proof::<F, D, PoseidonGoldilocksConfig, MonolithHash>(c, generate_config_for_monolith_gate::<F,D>());
+    bench_base_proof::<F, D, MonolithGoldilocksConfig, MonolithHash>(c, generate_config_for_monolith_gate::<F,D>());
 }
 
 criterion_group!(name = benches;

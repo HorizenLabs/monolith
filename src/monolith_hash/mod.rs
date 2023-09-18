@@ -11,7 +11,6 @@ use plonky2::plonk::config::Hasher;
 use unroll::unroll_for_loops;
 
 pub mod monolith_goldilocks;
-pub mod gadget;
 
 // change these values and disable `default-sponge-params` feature if it is needed to change the
 // default sponge parameters

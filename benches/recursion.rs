@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use anyhow::Result;
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use monolith::gates::generate_config_for_monolith_gate;
 use plonky2::field::extension::Extendable;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::hash::hash_types::RichField;
@@ -13,7 +14,7 @@ use plonky2::plonk::proof::{ProofWithPublicInputs, ProofWithPublicInputsTarget};
 use tynm::type_name;
 use monolith::monolith_hash::Monolith;
 use monolith::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
-use crate::circuits::{BaseCircuit, generate_config_for_monolith};
+use crate::circuits::BaseCircuit;
 
 mod circuits;
 
@@ -256,7 +257,7 @@ fn benchmark(c: &mut Criterion) {
     };
     let monolith_config = HashConfig::<D, MonolithGoldilocksConfig> {
         gen_config: PhantomData::default(),
-        circuit_config: generate_config_for_monolith::<F,D>(),
+        circuit_config: generate_config_for_monolith_gate::<F,D>(),
     };
     bench_recursive_proof::<F, D, POSEIDON_RECURSION_THRESHOLD, _, _>(c, &poseidon_config, &poseidon_config);
     bench_recursive_proof::<F, D, POSEIDON_RECURSION_THRESHOLD, PoseidonGoldilocksConfig, MonolithGoldilocksConfig>(c, &poseidon_config, &monolith_config);
