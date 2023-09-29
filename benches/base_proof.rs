@@ -1,15 +1,15 @@
-use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use plonky2_monolith::gates::generate_config_for_monolith_gate;
+use crate::circuits::BaseCircuit;
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use plonky2::field::extension::Extendable;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::hash::hash_types::RichField;
 use plonky2::hash::poseidon::PoseidonHash;
 use plonky2::plonk::circuit_data::CircuitConfig;
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, Hasher, PoseidonGoldilocksConfig};
-use tynm::type_name;
+use plonky2_monolith::gates::generate_config_for_monolith_gate;
 use plonky2_monolith::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
 use plonky2_monolith::monolith_hash::{Monolith, MonolithHash};
-use crate::circuits::BaseCircuit;
+use tynm::type_name;
 
 mod circuits;
 
@@ -28,8 +28,7 @@ fn bench_base_proof<
 >(
     c: &mut Criterion,
     config: CircuitConfig,
-)
-{
+) {
     let mut group = c.benchmark_group(&format!(
         "base-proof<{}, {}>",
         type_name::<C>(),
@@ -49,28 +48,37 @@ fn bench_base_proof<
         let base_circuit =
             BaseCircuit::<F, C, D, H>::build_base_circuit(config.clone(), log_num_hashes);
 
-        pretty_print!("circuit size: 2^{} gates", base_circuit.get_circuit_data().common.degree_bits());
+        pretty_print!(
+            "circuit size: 2^{} gates",
+            base_circuit.get_circuit_data().common.degree_bits()
+        );
 
-        group.bench_function(format!("prove circuit with 2^{} hashes", log_num_hashes).as_str(), |b| {
-            b.iter_batched(
-                || F::rand(),
-                |init| base_circuit.generate_base_proof(init).unwrap(),
-                BatchSize::PerIteration,
-            )
-        });
+        group.bench_function(
+            format!("prove circuit with 2^{} hashes", log_num_hashes).as_str(),
+            |b| {
+                b.iter_batched(
+                    || F::rand(),
+                    |init| base_circuit.generate_base_proof(init).unwrap(),
+                    BatchSize::PerIteration,
+                )
+            },
+        );
 
         let proof = base_circuit.generate_base_proof(F::rand()).unwrap();
 
         let serialized_proof = serde_cbor::to_vec(&proof).unwrap();
         pretty_print!("proof size: {}", serialized_proof.len());
 
-        group.bench_function(format!("verify circuit with 2^{} hashes", log_num_hashes).as_str(), |b| {
-            b.iter_batched(
-                || (base_circuit.get_circuit_data(), proof.clone()),
-                |(data, proof)| data.verify(proof).unwrap(),
-                BatchSize::PerIteration,
-            )
-        });
+        group.bench_function(
+            format!("verify circuit with 2^{} hashes", log_num_hashes).as_str(),
+            |b| {
+                b.iter_batched(
+                    || (base_circuit.get_circuit_data(), proof.clone()),
+                    |(data, proof)| data.verify(proof).unwrap(),
+                    BatchSize::PerIteration,
+                )
+            },
+        );
     }
 
     group.finish();
@@ -79,10 +87,22 @@ fn bench_base_proof<
 fn benchmark(c: &mut Criterion) {
     const D: usize = 2;
     type F = GoldilocksField;
-    bench_base_proof::<F, D, PoseidonGoldilocksConfig, PoseidonHash>(c, CircuitConfig::standard_recursion_config());
-    bench_base_proof::<F, D, MonolithGoldilocksConfig, PoseidonHash>(c, CircuitConfig::standard_recursion_config());
-    bench_base_proof::<F, D, PoseidonGoldilocksConfig, MonolithHash>(c, generate_config_for_monolith_gate::<F,D>());
-    bench_base_proof::<F, D, MonolithGoldilocksConfig, MonolithHash>(c, generate_config_for_monolith_gate::<F,D>());
+    bench_base_proof::<F, D, PoseidonGoldilocksConfig, PoseidonHash>(
+        c,
+        CircuitConfig::standard_recursion_config(),
+    );
+    bench_base_proof::<F, D, MonolithGoldilocksConfig, PoseidonHash>(
+        c,
+        CircuitConfig::standard_recursion_config(),
+    );
+    bench_base_proof::<F, D, PoseidonGoldilocksConfig, MonolithHash>(
+        c,
+        generate_config_for_monolith_gate::<F, D>(),
+    );
+    bench_base_proof::<F, D, MonolithGoldilocksConfig, MonolithHash>(
+        c,
+        generate_config_for_monolith_gate::<F, D>(),
+    );
 }
 
 criterion_group!(name = benches;

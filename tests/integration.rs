@@ -1,15 +1,14 @@
-use plonky2_monolith::monolith_hash::MonolithHash;
-use plonky2_monolith::{gates::generate_config_for_monolith_gate, monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig};
+use core::ops::Mul;
 use plonky2::field::{goldilocks_field::GoldilocksField, types::Sample};
 use plonky2::hash::hash_types::NUM_HASH_OUT_ELTS;
+use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::config::Hasher;
-use plonky2::iop::witness::{PartialWitness,WitnessWrite};
-use core::ops::Mul;
-
-
-
-
+use plonky2_monolith::monolith_hash::MonolithHash;
+use plonky2_monolith::{
+    gates::generate_config_for_monolith_gate,
+    monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig,
+};
 
 #[test]
 fn test_circuit_with_monolith() {
@@ -18,7 +17,7 @@ fn test_circuit_with_monolith() {
     type H = MonolithHash;
     type C = MonolithGoldilocksConfig;
     const NUM_OPS: usize = 1024;
-    let config = generate_config_for_monolith_gate::<F,D>();
+    let config = generate_config_for_monolith_gate::<F, D>();
     let mut builder = CircuitBuilder::<F, D>::new(config);
     let init_t = builder.add_virtual_public_input();
     let mut res_t = builder.add_virtual_target();
@@ -30,16 +29,13 @@ fn test_circuit_with_monolith() {
         res_t = builder.mul(res_t, res_t);
         let mut to_be_hashed_elements = vec![res_t];
         to_be_hashed_elements.extend_from_slice(hash_targets.as_slice());
-        res_t = builder
-            .hash_or_noop::<H>(to_be_hashed_elements)
-            .elements[0]
+        res_t = builder.hash_or_noop::<H>(to_be_hashed_elements).elements[0]
     }
     let out_t = builder.add_virtual_public_input();
     let is_eq_t = builder.is_equal(out_t, res_t);
     builder.assert_one(is_eq_t.target);
 
     let data = builder.build::<C>();
-
 
     let mut pw = PartialWitness::<F>::new();
     let input = F::rand();
@@ -66,10 +62,8 @@ fn test_circuit_with_monolith() {
 
     let proof = data.prove(pw).unwrap();
 
-
     assert_eq!(proof.public_inputs[0], input);
     assert_eq!(proof.public_inputs[1], res);
 
     data.verify(proof).unwrap();
-
 }

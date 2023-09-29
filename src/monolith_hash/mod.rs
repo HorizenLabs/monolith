@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 use plonky2::field::extension::{Extendable, FieldExtension};
 use plonky2::field::types::PrimeField64;
 use plonky2::hash::hash_types::{HashOut, RichField};
@@ -7,6 +6,7 @@ use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::iop::target::Target;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::config::Hasher;
+use std::fmt::Debug;
 
 use unroll::unroll_for_loops;
 
@@ -65,7 +65,11 @@ pub(crate) fn split(x: u128) -> (u64, u32) {
 // `SPONGE_WIDTH` elements initialized to 0 to compute the outcome of the layer
 #[inline(always)]
 #[unroll_for_loops]
-fn concrete_u128_with_tmp_buffer<M: Monolith>(state_u128: &[u128; SPONGE_WIDTH], round_constants: &[u64; SPONGE_WIDTH], res: &mut [u128; SPONGE_WIDTH]) {
+fn concrete_u128_with_tmp_buffer<M: Monolith>(
+    state_u128: &[u128; SPONGE_WIDTH],
+    round_constants: &[u64; SPONGE_WIDTH],
+    res: &mut [u128; SPONGE_WIDTH],
+) {
     for row in 0..SPONGE_WIDTH {
         for (column, input) in state_u128.iter().enumerate() {
             res[row] += *input * (M::MAT_12[row][column] as u128);
@@ -97,22 +101,29 @@ pub trait Monolith: PrimeField64 {
     fn bar_64(limb: u64) -> u64 {
         match LOOKUP_BITS {
             8 => {
-                let limbl1 = ((!limb & 0x8080808080808080) >> 7) | ((!limb & 0x7F7F7F7F7F7F7F7F) << 1); // Left rotation by 1
-                let limbl2 = ((limb & 0xC0C0C0C0C0C0C0C0) >> 6) | ((limb & 0x3F3F3F3F3F3F3F3F) << 2); // Left rotation by 2
-                let limbl3 = ((limb & 0xE0E0E0E0E0E0E0E0) >> 5) | ((limb & 0x1F1F1F1F1F1F1F1F) << 3); // Left rotation by 3
+                let limbl1 =
+                    ((!limb & 0x8080808080808080) >> 7) | ((!limb & 0x7F7F7F7F7F7F7F7F) << 1); // Left rotation by 1
+                let limbl2 =
+                    ((limb & 0xC0C0C0C0C0C0C0C0) >> 6) | ((limb & 0x3F3F3F3F3F3F3F3F) << 2); // Left rotation by 2
+                let limbl3 =
+                    ((limb & 0xE0E0E0E0E0E0E0E0) >> 5) | ((limb & 0x1F1F1F1F1F1F1F1F) << 3); // Left rotation by 3
 
                 // y_i = x_i + (1 + x_{i+1}) * x_{i+2} * x_{i+3}
                 let tmp = limb ^ limbl1 & limbl2 & limbl3;
                 ((tmp & 0x8080808080808080) >> 7) | ((tmp & 0x7F7F7F7F7F7F7F7F) << 1)
-            },
+            }
             16 => {
-                let limbl1 = ((!limb & 0x8000800080008000) >> 15) | ((!limb & 0x7FFF7FFF7FFF7FFF) << 1); // Left rotation by 1
-                let limbl2 = ((limb & 0xC000C000C000C000) >> 14) | ((limb & 0x3FFF3FFF3FFF3FFF) << 2); // Left rotation by 2
-                let limbl3 = ((limb & 0xE000E000E000E000) >> 13) | ((limb & 0x1FFF1FFF1FFF1FFF) << 3); // Left rotation by 3
+                let limbl1 =
+                    ((!limb & 0x8000800080008000) >> 15) | ((!limb & 0x7FFF7FFF7FFF7FFF) << 1); // Left rotation by 1
+                let limbl2 =
+                    ((limb & 0xC000C000C000C000) >> 14) | ((limb & 0x3FFF3FFF3FFF3FFF) << 2); // Left rotation by 2
+                let limbl3 =
+                    ((limb & 0xE000E000E000E000) >> 13) | ((limb & 0x1FFF1FFF1FFF1FFF) << 3); // Left rotation by 3
 
                 // y_i = x_i + (1 + x_{i+1}) * x_{i+2} * x_{i+3}
                 let tmp = limb ^ limbl1 & limbl2 & limbl3;
-                ((tmp & 0x8000800080008000) >> 15) | ((tmp & 0x7FFF7FFF7FFF7FFF) << 1) // Final rotation
+                ((tmp & 0x8000800080008000) >> 15) | ((tmp & 0x7FFF7FFF7FFF7FFF) << 1)
+                // Final rotation
             }
             _ => {
                 panic!("Unsupported lookup size");
@@ -126,22 +137,29 @@ pub trait Monolith: PrimeField64 {
         let limb = *el as u64;
         *el = match LOOKUP_BITS {
             8 => {
-                let limbl1 = ((!limb & 0x8080808080808080) >> 7) | ((!limb & 0x7F7F7F7F7F7F7F7F) << 1); // Left rotation by 1
-                let limbl2 = ((limb & 0xC0C0C0C0C0C0C0C0) >> 6) | ((limb & 0x3F3F3F3F3F3F3F3F) << 2); // Left rotation by 2
-                let limbl3 = ((limb & 0xE0E0E0E0E0E0E0E0) >> 5) | ((limb & 0x1F1F1F1F1F1F1F1F) << 3); // Left rotation by 3
+                let limbl1 =
+                    ((!limb & 0x8080808080808080) >> 7) | ((!limb & 0x7F7F7F7F7F7F7F7F) << 1); // Left rotation by 1
+                let limbl2 =
+                    ((limb & 0xC0C0C0C0C0C0C0C0) >> 6) | ((limb & 0x3F3F3F3F3F3F3F3F) << 2); // Left rotation by 2
+                let limbl3 =
+                    ((limb & 0xE0E0E0E0E0E0E0E0) >> 5) | ((limb & 0x1F1F1F1F1F1F1F1F) << 3); // Left rotation by 3
 
                 // y_i = x_i + (1 + x_{i+1}) * x_{i+2} * x_{i+3}
                 let tmp = limb ^ limbl1 & limbl2 & limbl3;
                 ((tmp & 0x8080808080808080) >> 7) | ((tmp & 0x7F7F7F7F7F7F7F7F) << 1)
-            },
+            }
             16 => {
-                let limbl1 = ((!limb & 0x8000800080008000) >> 15) | ((!limb & 0x7FFF7FFF7FFF7FFF) << 1); // Left rotation by 1
-                let limbl2 = ((limb & 0xC000C000C000C000) >> 14) | ((limb & 0x3FFF3FFF3FFF3FFF) << 2); // Left rotation by 2
-                let limbl3 = ((limb & 0xE000E000E000E000) >> 13) | ((limb & 0x1FFF1FFF1FFF1FFF) << 3); // Left rotation by 3
+                let limbl1 =
+                    ((!limb & 0x8000800080008000) >> 15) | ((!limb & 0x7FFF7FFF7FFF7FFF) << 1); // Left rotation by 1
+                let limbl2 =
+                    ((limb & 0xC000C000C000C000) >> 14) | ((limb & 0x3FFF3FFF3FFF3FFF) << 2); // Left rotation by 2
+                let limbl3 =
+                    ((limb & 0xE000E000E000E000) >> 13) | ((limb & 0x1FFF1FFF1FFF1FFF) << 3); // Left rotation by 3
 
                 // y_i = x_i + (1 + x_{i+1}) * x_{i+2} * x_{i+3}
                 let tmp = limb ^ limbl1 & limbl2 & limbl3;
-                ((tmp & 0x8000800080008000) >> 15) | ((tmp & 0x7FFF7FFF7FFF7FFF) << 1) // Final rotation
+                ((tmp & 0x8000800080008000) >> 15) | ((tmp & 0x7FFF7FFF7FFF7FFF) << 1)
+                // Final rotation
             }
             _ => {
                 panic!("Unsupported lookup size");
@@ -163,7 +181,7 @@ pub trait Monolith: PrimeField64 {
     fn bricks(state: &mut [Self; SPONGE_WIDTH]) {
         // Feistel Type-3
         for i in (1..SPONGE_WIDTH).rev() {
-            let prev = state[i-1];
+            let prev = state[i - 1];
             let tmp_square = prev * prev;
             state[i] += tmp_square;
         }
@@ -177,10 +195,12 @@ pub trait Monolith: PrimeField64 {
         // Use "& 0xFFFFFFFFFFFFFFFF" to tell the compiler it is dealing with 64-bit values (save
         // some instructions for upper half)
         for i in (1..SPONGE_WIDTH).rev() {
-            let prev = state_u128[i-1];
-            let mut tmp_square = (prev & 0xFFFFFFFFFFFFFFFF_u128) * (prev & 0xFFFFFFFFFFFFFFFF_u128);
+            let prev = state_u128[i - 1];
+            let mut tmp_square =
+                (prev & 0xFFFFFFFFFFFFFFFF_u128) * (prev & 0xFFFFFFFFFFFFFFFF_u128);
             tmp_square = Self::from_noncanonical_u128(tmp_square).to_noncanonical_u64() as u128;
-            state_u128[i] = (state_u128[i] & 0xFFFFFFFFFFFFFFFF_u128) + (tmp_square & 0xFFFFFFFFFFFFFFFF_u128);
+            state_u128[i] =
+                (state_u128[i] & 0xFFFFFFFFFFFFFFFF_u128) + (tmp_square & 0xFFFFFFFFFFFFFFFF_u128);
         }
     }
 
@@ -188,12 +208,12 @@ pub trait Monolith: PrimeField64 {
     #[inline(always)]
     #[unroll_for_loops]
     fn bricks_field<F: FieldExtension<D, BaseField = Self>, const D: usize>(
-        state: &mut [F; SPONGE_WIDTH]
+        state: &mut [F; SPONGE_WIDTH],
     ) {
         // Feistel Type-3
         // Feistel Type-3
         for i in (1..SPONGE_WIDTH).rev() {
-            let prev = state[i-1];
+            let prev = state[i - 1];
             let tmp_square = prev * prev;
             state[i] += tmp_square;
         }
@@ -204,13 +224,13 @@ pub trait Monolith: PrimeField64 {
     #[unroll_for_loops]
     fn bricks_circuit<const D: usize>(
         builder: &mut CircuitBuilder<Self, D>,
-        state: &mut [ExtensionTarget<D>; SPONGE_WIDTH]
+        state: &mut [ExtensionTarget<D>; SPONGE_WIDTH],
     ) where
         Self: RichField + Extendable<D>,
     {
         // Feistel Type-3
         for i in (1..SPONGE_WIDTH).rev() {
-            let prev = state[i-1];
+            let prev = state[i - 1];
             state[i] = builder.mul_add_extension(prev, prev, state[i])
         }
     }
@@ -241,7 +261,8 @@ pub trait Monolith: PrimeField64 {
     #[inline(always)]
     #[unroll_for_loops]
     fn concrete_field<F: FieldExtension<D, BaseField = Self>, const D: usize>(
-        state: &mut [F; SPONGE_WIDTH], round_constants: &[u64; SPONGE_WIDTH]
+        state: &mut [F; SPONGE_WIDTH],
+        round_constants: &[u64; SPONGE_WIDTH],
     ) {
         let mut state_tmp = vec![F::ZERO; SPONGE_WIDTH];
         for row in 0..SPONGE_WIDTH {
@@ -258,16 +279,24 @@ pub trait Monolith: PrimeField64 {
     #[unroll_for_loops]
     fn concrete_circuit<const D: usize>(
         builder: &mut CircuitBuilder<Self, D>,
-        state: &mut [ExtensionTarget<D>; SPONGE_WIDTH], round_constants: &[u64; SPONGE_WIDTH],
+        state: &mut [ExtensionTarget<D>; SPONGE_WIDTH],
+        round_constants: &[u64; SPONGE_WIDTH],
     ) where
         Self: RichField + Extendable<D>,
     {
         let mut state_tmp = vec![builder.zero_extension(); SPONGE_WIDTH];
         for row in 0..SPONGE_WIDTH {
             for (column, input) in state.iter().enumerate() {
-                state_tmp[row] = builder.mul_const_add_extension(Self::from_canonical_u64(Self::MAT_12[row][column]), *input, state_tmp[row]);
+                state_tmp[row] = builder.mul_const_add_extension(
+                    Self::from_canonical_u64(Self::MAT_12[row][column]),
+                    *input,
+                    state_tmp[row],
+                );
             }
-            state_tmp[row] = builder.add_const_extension(state_tmp[row], Self::from_canonical_u64(round_constants[row]));
+            state_tmp[row] = builder.add_const_extension(
+                state_tmp[row],
+                Self::from_canonical_u64(round_constants[row]),
+            );
         }
         state.copy_from_slice(&state_tmp);
     }
@@ -294,7 +323,6 @@ pub trait Monolith: PrimeField64 {
         }
         state_f
     }
-
 }
 
 /// Implementor of Plonky2 `PlonkyPermutation` trait for Monolith
@@ -328,7 +356,7 @@ impl Permuter for Target {
 }
 
 impl<T: Copy + Debug + Default + Eq + Permuter + Send + Sync> PlonkyPermutation<T>
-for MonolithPermutation<T>
+    for MonolithPermutation<T>
 {
     const RATE: usize = SPONGE_RATE;
     const WIDTH: usize = SPONGE_WIDTH;
@@ -385,8 +413,8 @@ impl<F: RichField + Monolith> Hasher<F> for MonolithHash {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use plonky2::field::types::Field;
     use crate::monolith_hash::{Monolith, SPONGE_WIDTH};
+    use plonky2::field::types::Field;
 
     pub(crate) fn check_test_vectors<F: Field>(
         test_vectors: Vec<([u64; SPONGE_WIDTH], [u64; SPONGE_WIDTH])>,

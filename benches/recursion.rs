@@ -1,20 +1,22 @@
-use std::marker::PhantomData;
+use crate::circuits::BaseCircuit;
 use anyhow::Result;
-use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use plonky2_monolith::gates::generate_config_for_monolith_gate;
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use plonky2::field::extension::Extendable;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::hash::hash_types::RichField;
 use plonky2::hash::poseidon::PoseidonHash;
 use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
-use plonky2::plonk::circuit_data::{CircuitConfig, CircuitData, CommonCircuitData, VerifierCircuitTarget};
+use plonky2::plonk::circuit_data::{
+    CircuitConfig, CircuitData, CommonCircuitData, VerifierCircuitTarget,
+};
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, PoseidonGoldilocksConfig};
 use plonky2::plonk::proof::{ProofWithPublicInputs, ProofWithPublicInputsTarget};
-use tynm::type_name;
-use plonky2_monolith::monolith_hash::Monolith;
+use plonky2_monolith::gates::generate_config_for_monolith_gate;
 use plonky2_monolith::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
-use crate::circuits::BaseCircuit;
+use plonky2_monolith::monolith_hash::Monolith;
+use std::marker::PhantomData;
+use tynm::type_name;
 
 mod circuits;
 
@@ -41,16 +43,20 @@ struct ShrinkCircuit<
 }
 
 impl<
-    F: RichField + Extendable<D>,
-    C: GenericConfig<D, F = F>,
-    InnerC: GenericConfig<D, F = F>,
-    const D: usize,
-> ShrinkCircuit<F, C, InnerC, D>
-    where
-        InnerC::Hasher: AlgebraicHasher<F>,
-        C::Hasher: AlgebraicHasher<F>,
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        InnerC: GenericConfig<D, F = F>,
+        const D: usize,
+    > ShrinkCircuit<F, C, InnerC, D>
+where
+    InnerC::Hasher: AlgebraicHasher<F>,
+    C::Hasher: AlgebraicHasher<F>,
 {
-    pub fn build_shrink_circuit<const RECURSION_THRESHOLD: usize>(inner_cd: &CommonCircuitData<F, D>, inner_config: CircuitConfig, rec_config: CircuitConfig) -> Self {
+    pub fn build_shrink_circuit<const RECURSION_THRESHOLD: usize>(
+        inner_cd: &CommonCircuitData<F, D>,
+        inner_config: CircuitConfig,
+        rec_config: CircuitConfig,
+    ) -> Self {
         let mut circuit_data = inner_cd;
         let mut shrink_circuit = Self {
             proof_targets: Vec::new(),
@@ -182,11 +188,10 @@ fn bench_recursive_proof<
     ));
 
     for log_num_hashes in [11, 13, 15] {
-        let base_circuit =
-            BaseCircuit::<F, InnerC, D, PoseidonHash>::build_base_circuit(
-                CircuitConfig::standard_recursion_config(),
-                log_num_hashes,
-            );
+        let base_circuit = BaseCircuit::<F, InnerC, D, PoseidonHash>::build_base_circuit(
+            CircuitConfig::standard_recursion_config(),
+            log_num_hashes,
+        );
 
         let base_circuit_degree = base_circuit.get_circuit_data().common.degree_bits();
 
@@ -208,7 +213,11 @@ fn bench_recursive_proof<
         );
 
         let shrink_circuit =
-            ShrinkCircuit::<F, C, InnerC, D>::build_shrink_circuit::<RECURSION_THRESHOLD>(inner_cd, inner_conf.circuit_config.clone(), rec_conf.circuit_config.clone(),);
+            ShrinkCircuit::<F, C, InnerC, D>::build_shrink_circuit::<RECURSION_THRESHOLD>(
+                inner_cd,
+                inner_conf.circuit_config.clone(),
+                rec_conf.circuit_config.clone(),
+            );
 
         pretty_print!("shrink steps: {}", shrink_circuit.num_shrink_steps());
 
@@ -257,12 +266,34 @@ fn benchmark(c: &mut Criterion) {
     };
     let monolith_config = HashConfig::<D, MonolithGoldilocksConfig> {
         gen_config: PhantomData::default(),
-        circuit_config: generate_config_for_monolith_gate::<F,D>(),
+        circuit_config: generate_config_for_monolith_gate::<F, D>(),
     };
-    bench_recursive_proof::<F, D, POSEIDON_RECURSION_THRESHOLD, _, _>(c, &poseidon_config, &poseidon_config);
-    bench_recursive_proof::<F, D, POSEIDON_RECURSION_THRESHOLD, PoseidonGoldilocksConfig, MonolithGoldilocksConfig>(c, &poseidon_config, &monolith_config);
-    bench_recursive_proof::<F, D, MONOLITH_RECURSION_THRESHOLD, MonolithGoldilocksConfig, PoseidonGoldilocksConfig>(c, &monolith_config, &poseidon_config);
-    bench_recursive_proof::<F, D, MONOLITH_RECURSION_THRESHOLD, MonolithGoldilocksConfig, MonolithGoldilocksConfig>(c, &monolith_config, &monolith_config);
+    bench_recursive_proof::<F, D, POSEIDON_RECURSION_THRESHOLD, _, _>(
+        c,
+        &poseidon_config,
+        &poseidon_config,
+    );
+    bench_recursive_proof::<
+        F,
+        D,
+        POSEIDON_RECURSION_THRESHOLD,
+        PoseidonGoldilocksConfig,
+        MonolithGoldilocksConfig,
+    >(c, &poseidon_config, &monolith_config);
+    bench_recursive_proof::<
+        F,
+        D,
+        MONOLITH_RECURSION_THRESHOLD,
+        MonolithGoldilocksConfig,
+        PoseidonGoldilocksConfig,
+    >(c, &monolith_config, &poseidon_config);
+    bench_recursive_proof::<
+        F,
+        D,
+        MONOLITH_RECURSION_THRESHOLD,
+        MonolithGoldilocksConfig,
+        MonolithGoldilocksConfig,
+    >(c, &monolith_config, &monolith_config);
 }
 
 criterion_group!(name = benches;

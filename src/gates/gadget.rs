@@ -1,4 +1,9 @@
-use std::sync::Arc;
+use crate::gates::base_sum_custom::{BaseSplitGenerator, BaseSumCustomGate};
+use crate::gates::monolith::MonolithGate;
+use crate::monolith_hash::{
+    Monolith, MonolithHash, MonolithPermutation, LOOKUP_BITS, LOOKUP_NUM_LIMBS, LOOKUP_SIZE,
+    NUM_BARS, N_ROUNDS, SPONGE_WIDTH,
+};
 use plonky2::field::extension::Extendable;
 use plonky2::gates::lookup_table::LookupTable;
 use plonky2::hash::hash_types::RichField;
@@ -10,9 +15,7 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::circuit_data::CommonCircuitData;
 use plonky2::plonk::config::AlgebraicHasher;
 use plonky2::util::serialization::{Buffer, IoResult};
-use crate::gates::base_sum_custom::{BaseSplitGenerator, BaseSumCustomGate};
-use crate::gates::monolith::MonolithGate;
-use crate::monolith_hash::{LOOKUP_BITS, LOOKUP_NUM_LIMBS, LOOKUP_SIZE, Monolith, MonolithHash, MonolithPermutation, N_ROUNDS, NUM_BARS, SPONGE_WIDTH};
+use std::sync::Arc;
 
 /// `SplitAndLookup` provides a method to perform the following operation in a Plonky2 circuit:
 /// 1) Split the input element into a list of targets, where each one represents a
@@ -26,9 +29,10 @@ pub trait SplitAndLookup<const B: usize> {
     fn split_le_lookup(&mut self, x: Target, num_limbs: usize, lut_index: usize) -> Target;
 }
 
-impl<F: RichField + Extendable<D>, const D: usize, const B: usize> SplitAndLookup<B> for CircuitBuilder<F, D> {
+impl<F: RichField + Extendable<D>, const D: usize, const B: usize> SplitAndLookup<B>
+    for CircuitBuilder<F, D>
+{
     fn split_le_lookup(&mut self, x: Target, num_limbs: usize, lut_index: usize) -> Target {
-
         // Split into individual targets (decompose)
         let gate_type = BaseSumCustomGate::<B>::new(num_limbs, &self.config);
         let (gate, i) = self.find_slot(gate_type, &[F::from_canonical_usize(num_limbs)], &[]);
@@ -46,15 +50,14 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> SplitAndLooku
         // Get final output target (compose)
         let limbs = split_targets_out;
 
-        let (row, i) = self.find_slot(gate_type, &[F::from_canonical_usize(num_limbs)],&[]);
-        for (limb, wire) in limbs
-            .iter()
-            .zip(gate_type.ith_limbs(i))
-        {
+        let (row, i) = self.find_slot(gate_type, &[F::from_canonical_usize(num_limbs)], &[]);
+        for (limb, wire) in limbs.iter().zip(gate_type.ith_limbs(i)) {
             self.connect(*limb, Target::wire(row, wire));
         }
 
-        self.add_simple_generator(BaseSumCustomRestrictGenerator::<B>( BaseSplitGenerator::new(row, num_limbs, i)));
+        self.add_simple_generator(BaseSumCustomRestrictGenerator::<B>(
+            BaseSplitGenerator::new(row, num_limbs, i),
+        ));
 
         Target::wire(row, gate_type.ith_wire_sum(i))
     }
@@ -63,8 +66,9 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> SplitAndLooku
 #[derive(Debug, Default)]
 struct BaseSumCustomRestrictGenerator<const B: usize>(BaseSplitGenerator<B>);
 
-impl<F: RichField + Extendable<D>, const B: usize, const D: usize> SimpleGenerator<F, D> for BaseSumCustomRestrictGenerator<B> {
-
+impl<F: RichField + Extendable<D>, const B: usize, const D: usize> SimpleGenerator<F, D>
+    for BaseSumCustomRestrictGenerator<B>
+{
     fn id(&self) -> String {
         "BaseSumCustomRestrictGenerator".to_string()
     }
@@ -80,9 +84,7 @@ impl<F: RichField + Extendable<D>, const B: usize, const D: usize> SimpleGenerat
             .iter()
             .map(|&t| witness.get_target(t))
             .rev()
-            .fold(F::ZERO, |acc, limb| {
-                acc * F::from_canonical_usize(B) + limb
-            });
+            .fold(F::ZERO, |acc, limb| acc * F::from_canonical_usize(B) + limb);
 
         out_buffer.set_target(self.0.wire_sum(), sum);
     }
@@ -93,9 +95,8 @@ impl<F: RichField + Extendable<D>, const B: usize, const D: usize> SimpleGenerat
 
     fn deserialize(src: &mut Buffer, _common_data: &CommonCircuitData<F, D>) -> IoResult<Self> {
         let gen = BaseSplitGenerator::deserialize(src, _common_data)?;
-        Ok(BaseSumCustomRestrictGenerator::<B>( gen))
+        Ok(BaseSumCustomRestrictGenerator::<B>(gen))
     }
-
 }
 
 impl<F: RichField + Monolith> AlgebraicHasher<F> for MonolithHash {
@@ -106,8 +107,8 @@ impl<F: RichField + Monolith> AlgebraicHasher<F> for MonolithHash {
         swap: BoolTarget,
         builder: &mut CircuitBuilder<F, D>,
     ) -> Self::AlgebraicPermutation
-        where
-            F: RichField + Extendable<D>,
+    where
+        F: RichField + Extendable<D>,
     {
         let lut_index = add_monolith_lookup_table(builder);
         let gate_type = MonolithGate::<F, D>::new();
@@ -128,9 +129,16 @@ impl<F: RichField + Monolith> AlgebraicHasher<F> for MonolithHash {
         // Route lookup wires
         for round_ctr in 0..N_ROUNDS {
             for i in 0..NUM_BARS {
-                let target_input: Target = Target::wire(gate, MonolithGate::<F, D>::wire_concrete_out(round_ctr, i));
-                let target_output = Target::wire(gate, MonolithGate::<F, D>::wire_bars_out(round_ctr, i));
-                let target_should = SplitAndLookup::<LOOKUP_SIZE>::split_le_lookup(builder, target_input, LOOKUP_NUM_LIMBS, lut_index); // Assumes a single lookup table
+                let target_input: Target =
+                    Target::wire(gate, MonolithGate::<F, D>::wire_concrete_out(round_ctr, i));
+                let target_output =
+                    Target::wire(gate, MonolithGate::<F, D>::wire_bars_out(round_ctr, i));
+                let target_should = SplitAndLookup::<LOOKUP_SIZE>::split_le_lookup(
+                    builder,
+                    target_input,
+                    LOOKUP_NUM_LIMBS,
+                    lut_index,
+                ); // Assumes a single lookup table
                 builder.connect(target_output, target_should);
             }
         }
@@ -142,15 +150,15 @@ impl<F: RichField + Monolith> AlgebraicHasher<F> for MonolithHash {
     }
 }
 
-pub(crate) fn add_monolith_lookup_table<F: RichField + Extendable<D>, const D:usize>(
-    builder: &mut CircuitBuilder<F,D>
+pub(crate) fn add_monolith_lookup_table<F: RichField + Extendable<D>, const D: usize>(
+    builder: &mut CircuitBuilder<F, D>,
 ) -> usize {
     // Add lookup table for Monolith. To ensure that the big lookup-table of Monolith is computed
     // and added to the builder only the first time this function is called, we employ a fake small
     // lookup-table to the circuit builder: if such a fake table is not available, then we compute
     // and add the big Monolith table; otherwise, we skip the computation of the Monolith table and
     // we simply return its index
-    let fake_table: LookupTable = Arc::new(vec![(0u16,0u16)]);
+    let fake_table: LookupTable = Arc::new(vec![(0u16, 0u16)]);
     if let Some(idx) = builder.is_stored(fake_table.clone()) {
         idx + 1
     } else {
@@ -159,32 +167,35 @@ pub(crate) fn add_monolith_lookup_table<F: RichField + Extendable<D>, const D:us
         let zero = builder.zero();
         builder.add_lookup_from_index(zero, fake_idx);
         let inp_table: [u16; LOOKUP_SIZE] = core::array::from_fn(|i| i as u16);
-        let idx = builder.add_lookup_table_from_fn(|i| {
-            let limb = i;
-            match LOOKUP_BITS {
-                8 => {
-                    let limbl1 = ((!limb & 0x80) >> 7) | ((!limb & 0x7F) << 1); // Left rotation by 1
-                    let limbl2 = ((limb & 0xC0) >> 6) | ((limb & 0x3F) << 2); // Left rotation by 2
-                    let limbl3 = ((limb & 0xE0) >> 5) | ((limb & 0x1F) << 3); // Left rotation by 3
+        let idx = builder.add_lookup_table_from_fn(
+            |i| {
+                let limb = i;
+                match LOOKUP_BITS {
+                    8 => {
+                        let limbl1 = ((!limb & 0x80) >> 7) | ((!limb & 0x7F) << 1); // Left rotation by 1
+                        let limbl2 = ((limb & 0xC0) >> 6) | ((limb & 0x3F) << 2); // Left rotation by 2
+                        let limbl3 = ((limb & 0xE0) >> 5) | ((limb & 0x1F) << 3); // Left rotation by 3
 
-                    // y_i = x_i + (1 + x_{i+1}) * x_{i+2} * x_{i+3}
-                    let tmp = limb ^ limbl1 & limbl2 & limbl3;
-                    ((tmp & 0x80) >> 7) | ((tmp & 0x7F) << 1)
-                },
-                16 => {
-                    let limbl1 = ((!limb & 0x8000) >> 15) | ((!limb & 0x7FFF) << 1); // Left rotation by 1
-                    let limbl2 = ((limb & 0xC000) >> 14) | ((limb & 0x3FFF) << 2); // Left rotation by 2
-                    let limbl3 = ((limb & 0xE000) >> 13) | ((limb & 0x1FFF) << 3); // Left rotation by 3
+                        // y_i = x_i + (1 + x_{i+1}) * x_{i+2} * x_{i+3}
+                        let tmp = limb ^ limbl1 & limbl2 & limbl3;
+                        ((tmp & 0x80) >> 7) | ((tmp & 0x7F) << 1)
+                    }
+                    16 => {
+                        let limbl1 = ((!limb & 0x8000) >> 15) | ((!limb & 0x7FFF) << 1); // Left rotation by 1
+                        let limbl2 = ((limb & 0xC000) >> 14) | ((limb & 0x3FFF) << 2); // Left rotation by 2
+                        let limbl3 = ((limb & 0xE000) >> 13) | ((limb & 0x1FFF) << 3); // Left rotation by 3
 
-                    // y_i = x_i + (1 + x_{i+1}) * x_{i+2} * x_{i+3}
-                    let tmp = limb ^ limbl1 & limbl2 & limbl3;
-                    ((tmp & 0x8000) >> 15) | ((tmp & 0x7FFF) << 1) // Final rotation
+                        // y_i = x_i + (1 + x_{i+1}) * x_{i+2} * x_{i+3}
+                        let tmp = limb ^ limbl1 & limbl2 & limbl3;
+                        ((tmp & 0x8000) >> 15) | ((tmp & 0x7FFF) << 1) // Final rotation
+                    }
+                    _ => {
+                        panic!("Unsupported lookup size");
+                    }
                 }
-                _ => {
-                    panic!("Unsupported lookup size");
-                }
-            }
-        }, &inp_table);
+            },
+            &inp_table,
+        );
         assert_eq!(fake_idx + 1, idx);
         idx
     }
@@ -192,6 +203,7 @@ pub(crate) fn add_monolith_lookup_table<F: RichField + Extendable<D>, const D:us
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::monolith_hash::{Monolith, MonolithHash, MonolithPermutation, SPONGE_WIDTH};
     use anyhow::Result;
     use log::{info, Level};
     use plonky2::field::extension::Extendable;
@@ -205,19 +217,21 @@ pub(crate) mod tests {
     use plonky2::plonk::proof::ProofWithPublicInputs;
     use plonky2::plonk::prover::prove;
     use plonky2::util::timing::TimingTree;
-    use crate::monolith_hash::{Monolith, MonolithHash, MonolithPermutation, SPONGE_WIDTH};
 
     pub(crate) fn test_monolith_hash_circuit<
         F: RichField + Extendable<D> + Monolith,
-        C: GenericConfig<D, F=F>,
+        C: GenericConfig<D, F = F>,
         const D: usize,
-    >(config: CircuitConfig) {
+    >(
+        config: CircuitConfig,
+    ) {
         let mut builder = CircuitBuilder::new(config);
 
         let inp_targets_array = builder.add_virtual_target_arr::<SPONGE_WIDTH>();
         let inp_targets = MonolithPermutation::<Target>::new(inp_targets_array);
 
-        let out_targets = MonolithHash::permute_swapped(inp_targets, builder._false(), &mut builder);
+        let out_targets =
+            MonolithHash::permute_swapped(inp_targets, builder._false(), &mut builder);
         builder.register_public_inputs(out_targets.as_ref());
         builder.print_gate_counts(0);
 
@@ -234,20 +248,25 @@ pub(crate) mod tests {
             .collect::<Vec<_>>();
 
         let mut inputs = PartialWitness::new();
-        inp_targets.as_ref().iter().zip(permutation_inputs.iter()).for_each(|(t, val)| inputs.set_target(
-            *t, *val
-        ));
+        inp_targets
+            .as_ref()
+            .iter()
+            .zip(permutation_inputs.iter())
+            .for_each(|(t, val)| inputs.set_target(*t, *val));
 
         let now = std::time::Instant::now();
         let proof = circuit.prove(inputs).unwrap();
         println!("[Prove time] {:.4} s", now.elapsed().as_secs_f64());
         println!("Proof size (bytes): {}", proof.to_bytes().len());
 
-        let expected_outputs: [F; SPONGE_WIDTH] = F::monolith(permutation_inputs.try_into().unwrap());
+        let expected_outputs: [F; SPONGE_WIDTH] =
+            F::monolith(permutation_inputs.try_into().unwrap());
 
-        proof.public_inputs.iter().zip(expected_outputs.iter()).for_each(|(v, out)| {
-            assert_eq!(*v, *out)
-        });
+        proof
+            .public_inputs
+            .iter()
+            .zip(expected_outputs.iter())
+            .for_each(|(v, out)| assert_eq!(*v, *out));
 
         let now = std::time::Instant::now();
         circuit.verify(proof).unwrap();
@@ -263,8 +282,7 @@ pub(crate) mod tests {
         config: CircuitConfig,
         num_ops: usize,
         print_timing: bool,
-    ) -> Result<(CircuitData<F, C, D>, ProofWithPublicInputs<F, C, D>)>
-    {
+    ) -> Result<(CircuitData<F, C, D>, ProofWithPublicInputs<F, C, D>)> {
         let mut builder = CircuitBuilder::<F, D>::new(config);
         let init_t = builder.add_virtual_public_input();
         let mut res_t = builder.add_virtual_target();
@@ -276,16 +294,13 @@ pub(crate) mod tests {
             res_t = builder.mul(res_t, res_t);
             let mut to_be_hashed_elements = vec![res_t];
             to_be_hashed_elements.extend_from_slice(hash_targets.as_slice());
-            res_t = builder
-                .hash_or_noop::<H>(to_be_hashed_elements)
-                .elements[0]
+            res_t = builder.hash_or_noop::<H>(to_be_hashed_elements).elements[0]
         }
         let out_t = builder.add_virtual_public_input();
         let is_eq_t = builder.is_equal(out_t, res_t);
         builder.assert_one(is_eq_t.target);
 
         let data = builder.build::<C>();
-
 
         let mut pw = PartialWitness::<F>::new();
         let input = F::rand();
@@ -337,8 +352,9 @@ pub(crate) mod tests {
         inner_cd: &CircuitData<F, InnerC, D>,
         config: &CircuitConfig,
     ) -> Result<(CircuitData<F, C, D>, ProofWithPublicInputs<F, C, D>)>
-    where C::Hasher: AlgebraicHasher<F>,
-    InnerC::Hasher: AlgebraicHasher<F>,
+    where
+        C::Hasher: AlgebraicHasher<F>,
+        InnerC::Hasher: AlgebraicHasher<F>,
     {
         let mut builder = CircuitBuilder::<F, D>::new(config.clone());
         let mut pw = PartialWitness::new();

@@ -1,4 +1,3 @@
-use std::ops::Range;
 use plonky2::field::extension::Extendable;
 use plonky2::field::packed::PackedField;
 use plonky2::field::types::{Field, Field64};
@@ -13,9 +12,12 @@ use plonky2::iop::witness::{PartitionWitness, Witness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::circuit_data::{CircuitConfig, CommonCircuitData};
 use plonky2::plonk::plonk_common::{reduce_with_powers, reduce_with_powers_ext_circuit};
-use plonky2::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBaseBatch, EvaluationVarsBasePacked};
+use plonky2::plonk::vars::{
+    EvaluationTargets, EvaluationVars, EvaluationVarsBaseBatch, EvaluationVarsBasePacked,
+};
 use plonky2::util::log_floor;
 use plonky2::util::serialization::{Buffer, IoResult, Read, Write};
+use std::ops::Range;
 
 /// A gate which can decompose an element of `GoldilocksField` into base B little-endian limbs.
 /// This gate is customized to be used for lookups of the Monolith hash function, and thus it has
@@ -47,14 +49,20 @@ impl<const B: usize> BaseSumCustomGate<B> {
     pub fn new(num_limbs: usize, config: &CircuitConfig) -> Self {
         let wires_per_op = Self::wires_per_op_from_limbs(num_limbs);
         let num_ops = config.num_routed_wires / wires_per_op;
-        assert!(num_ops > 0, "cannot decompose in {} limbs with {} routed wires", num_limbs, config.num_routed_wires);
+        assert!(
+            num_ops > 0,
+            "cannot decompose in {} limbs with {} routed wires",
+            num_limbs,
+            config.num_routed_wires
+        );
         Self { num_limbs, num_ops }
     }
 
     /// Instantiate a new `BaseSumCustomGate` employing the exact number of base B limbs necessary
     /// to represent an arbitrary field element in `F`
     pub fn new_from_config<F: Field64>(config: &CircuitConfig) -> Self {
-        let num_limbs = log_ceil(F::ORDER, B as u64).min(config.num_routed_wires - Self::START_LIMBS - 2);
+        let num_limbs =
+            log_ceil(F::ORDER, B as u64).min(config.num_routed_wires - Self::START_LIMBS - 2);
         Self::new(num_limbs, config)
     }
 
@@ -81,11 +89,14 @@ impl<const B: usize> BaseSumCustomGate<B> {
     /// Returns the index of the limb wires for the i-th operation of the gate.
     pub fn ith_limbs(&self, i: usize) -> Range<usize> {
         let wires_per_op = self.wires_per_op();
-        (i * wires_per_op + Self::START_LIMBS)..(i * wires_per_op + Self::START_LIMBS + self.num_limbs)
+        (i * wires_per_op + Self::START_LIMBS)
+            ..(i * wires_per_op + Self::START_LIMBS + self.num_limbs)
     }
 }
 
-impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D> for BaseSumCustomGate<B> {
+impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D>
+    for BaseSumCustomGate<B>
+{
     fn id(&self) -> String {
         format!("{self:?} + Base: {B}")
     }
@@ -118,18 +129,22 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D> fo
             let z = vars.local_wires[self.ith_wire_sum(i) + self.num_limbs + 1];
             let z_prime = vars.local_wires[self.ith_wire_sum(i) + self.num_limbs + 2];
 
-
             assert_eq!(limbs.len() % 2, 0);
 
             let base = F::Extension::from_canonical_usize(B);
-            let half_len = limbs.len()/2;
-            let a = limbs.iter().take(half_len-1).rev().fold(limbs[half_len-1], |acc, el| {
-                acc*base + *el
-            });
-            let temp = limbs.iter().rev().skip(1).take(half_len-1).fold(limbs[limbs.len()-1], |acc, el| {
-                acc*base + *el
-            });
-            let b =  temp - z;
+            let half_len = limbs.len() / 2;
+            let a = limbs
+                .iter()
+                .take(half_len - 1)
+                .rev()
+                .fold(limbs[half_len - 1], |acc, el| acc * base + *el);
+            let temp = limbs
+                .iter()
+                .rev()
+                .skip(1)
+                .take(half_len - 1)
+                .fold(limbs[limbs.len() - 1], |acc, el| acc * base + *el);
+            let b = temp - z;
 
             let two_32_m1 = F::Extension::from_canonical_usize(((1_u64 << 32) - 1) as usize);
 
@@ -165,16 +180,27 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D> fo
             assert_eq!(limbs.len() % 2, 0);
 
             let base = F::from_canonical_usize(B);
-            let half_len = limbs.len()/2;
-            let a = limbs.iter().take(half_len-1).rev().fold(limbs[half_len-1], |acc, el| {
-                builder.mul_const_add_extension(base, acc, *el)
-            });
-            let temp = limbs.iter().rev().skip(1).take(half_len-1).fold(limbs[limbs.len()-1], |acc, el| {
-                builder.mul_const_add_extension(base, acc, *el)
-            });
+            let half_len = limbs.len() / 2;
+            let a = limbs
+                .iter()
+                .take(half_len - 1)
+                .rev()
+                .fold(limbs[half_len - 1], |acc, el| {
+                    builder.mul_const_add_extension(base, acc, *el)
+                });
+            let temp = limbs
+                .iter()
+                .rev()
+                .skip(1)
+                .take(half_len - 1)
+                .fold(limbs[limbs.len() - 1], |acc, el| {
+                    builder.mul_const_add_extension(base, acc, *el)
+                });
             let b = builder.sub_extension(temp, z);
 
-            let two_32_m1 = builder.constant_extension(F::Extension::from_canonical_usize(((1_u64 << 32) - 1) as usize));
+            let two_32_m1 = builder.constant_extension(F::Extension::from_canonical_usize(
+                ((1_u64 << 32) - 1) as usize,
+            ));
 
             let temp = builder.mul_extension(a, b);
             constraints.push(temp);
@@ -188,14 +214,16 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D> fo
     }
 
     fn generators(&self, row: usize, _local_constants: &[F]) -> Vec<WitnessGeneratorRef<F, D>> {
-        (0..self.num_ops).map(|i| {
-            let gen = BaseSplitGenerator::<B> {
-                row,
-                num_limbs: self.num_limbs,
-                op: i,
-            };
-            WitnessGeneratorRef::new(gen.adapter())
-        }).collect()
+        (0..self.num_ops)
+            .map(|i| {
+                let gen = BaseSplitGenerator::<B> {
+                    row,
+                    num_limbs: self.num_limbs,
+                    op: i,
+                };
+                WitnessGeneratorRef::new(gen.adapter())
+            })
+            .collect()
     }
 
     // 1 for the sum then `num_limbs` for the limbs.
@@ -220,7 +248,7 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D> fo
 }
 
 impl<F: RichField + Extendable<D>, const D: usize, const B: usize> PackedEvaluableBase<F, D>
-for BaseSumCustomGate<B>
+    for BaseSumCustomGate<B>
 {
     fn eval_unfiltered_base_packed<P: PackedField<Scalar = F>>(
         &self,
@@ -242,13 +270,13 @@ for BaseSumCustomGate<B>
             assert_eq!(limbs.len() % 2, 0);
 
             let base = F::from_canonical_usize(B);
-            let half_len = limbs.len()/2;
-            let a = (0..half_len-1).rev().fold(limbs[half_len-1], |acc, i| {
-                acc*base + limbs[i]
-            });
-            let temp = (half_len..limbs.len()-1).rev().fold(limbs[limbs.len()-1], |acc, i| {
-                acc*base + limbs[i]
-            });
+            let half_len = limbs.len() / 2;
+            let a = (0..half_len - 1)
+                .rev()
+                .fold(limbs[half_len - 1], |acc, i| acc * base + limbs[i]);
+            let temp = (half_len..limbs.len() - 1)
+                .rev()
+                .fold(limbs[limbs.len() - 1], |acc, i| acc * base + limbs[i]);
             let b = temp - z;
 
             let two_32_m1 = F::from_canonical_usize(((1_u64 << 32) - 1) as usize);
@@ -269,11 +297,7 @@ pub struct BaseSplitGenerator<const B: usize> {
 
 impl<const B: usize> BaseSplitGenerator<B> {
     pub(crate) fn new(row: usize, num_limbs: usize, op: usize) -> Self {
-        Self {
-            row,
-            num_limbs,
-            op,
-        }
+        Self { row, num_limbs, op }
     }
 
     fn wires_per_op(&self) -> usize {
@@ -281,20 +305,34 @@ impl<const B: usize> BaseSplitGenerator<B> {
     }
 
     pub(crate) fn wire_sum(&self) -> Target {
-        Target::wire(self.row, self.wires_per_op() * self.op + BaseSumCustomGate::<B>::WIRE_SUM)
+        Target::wire(
+            self.row,
+            self.wires_per_op() * self.op + BaseSumCustomGate::<B>::WIRE_SUM,
+        )
     }
 
     pub(crate) fn limbs_wires(&self) -> Vec<Target> {
-        ((self.wires_per_op() * self.op + BaseSumCustomGate::<B>::START_LIMBS)..(self.wires_per_op() * self.op + BaseSumCustomGate::<B>::START_LIMBS + self.num_limbs)).map(|i| Target::wire(self.row, i)).collect()
+        ((self.wires_per_op() * self.op + BaseSumCustomGate::<B>::START_LIMBS)
+            ..(self.wires_per_op() * self.op
+                + BaseSumCustomGate::<B>::START_LIMBS
+                + self.num_limbs))
+            .map(|i| Target::wire(self.row, i))
+            .collect()
     }
 
     pub(crate) fn boundary_constraints_wires(&self) -> Vec<Target> {
-        ((self.wires_per_op() * self.op + BaseSumCustomGate::<B>::START_LIMBS + self.num_limbs)..(self.wires_per_op() * self.op + BaseSumCustomGate::<B>::START_LIMBS + self.num_limbs + 2)).map(|i| Target::wire(self.row, i)).collect()
+        ((self.wires_per_op() * self.op + BaseSumCustomGate::<B>::START_LIMBS + self.num_limbs)
+            ..(self.wires_per_op() * self.op
+                + BaseSumCustomGate::<B>::START_LIMBS
+                + self.num_limbs
+                + 2))
+            .map(|i| Target::wire(self.row, i))
+            .collect()
     }
 }
 
 impl<F: RichField + Extendable<D>, const B: usize, const D: usize> SimpleGenerator<F, D>
-for BaseSplitGenerator<B>
+    for BaseSplitGenerator<B>
 {
     fn id(&self) -> String {
         "BaseSplitRestrictGenerator".to_string()
@@ -305,9 +343,7 @@ for BaseSplitGenerator<B>
     }
 
     fn run_once(&self, witness: &PartitionWitness<F>, out_buffer: &mut GeneratedValues<F>) {
-        let sum_value = witness
-            .get_target(self.wire_sum())
-            .to_canonical_u64() as usize;
+        let sum_value = witness.get_target(self.wire_sum()).to_canonical_u64() as usize;
         debug_assert_eq!(
             (0..self.num_limbs).fold(sum_value, |acc, _| acc / B),
             0,
@@ -328,25 +364,29 @@ for BaseSplitGenerator<B>
         assert_eq!(limbs_value.len() % 2, 0);
 
         let base = F::from_canonical_usize(B);
-        let half_len = limbs_value.len()/2;
-        let a = limbs_value.iter().take(half_len-1).rev().fold(limbs_value[half_len-1], |acc, el| {
-            acc*base + *el
-        });
-        let b = limbs_value.iter().rev().skip(1).take(half_len-1).fold(limbs_value[limbs.len()-1], |acc, el| {
-            acc*base + *el
-        });
+        let half_len = limbs_value.len() / 2;
+        let a = limbs_value
+            .iter()
+            .take(half_len - 1)
+            .rev()
+            .fold(limbs_value[half_len - 1], |acc, el| acc * base + *el);
+        let b = limbs_value
+            .iter()
+            .rev()
+            .skip(1)
+            .take(half_len - 1)
+            .fold(limbs_value[limbs.len() - 1], |acc, el| acc * base + *el);
 
-        let z_field = if a == F::ZERO {
-            F::ONE
-        }
-        else {
-            b
-        };
-        let z_prime_field = F::inverse(&(z_field - F::from_canonical_u64(1_u64 << 32) + F::ONE))*z_field;
+        let z_field = if a == F::ZERO { F::ONE } else { b };
+        let z_prime_field =
+            F::inverse(&(z_field - F::from_canonical_u64(1_u64 << 32) + F::ONE)) * z_field;
         out_buffer.set_target(self.boundary_constraints_wires()[0], z_field);
         out_buffer.set_target(self.boundary_constraints_wires()[1], z_prime_field);
 
-        assert_eq!(z_prime_field*(z_field - F::from_canonical_u64(1_u64 << 32) + F::ONE), z_field);
+        assert_eq!(
+            z_prime_field * (z_field - F::from_canonical_u64(1_u64 << 32) + F::ONE),
+            z_field
+        );
     }
 
     fn serialize(&self, dst: &mut Vec<u8>, _common_data: &CommonCircuitData<F, D>) -> IoResult<()> {
@@ -365,17 +405,20 @@ for BaseSplitGenerator<B>
 
 #[cfg(test)]
 mod tests {
+    use crate::gates::base_sum_custom::BaseSumCustomGate;
+    use crate::monolith_hash::{LOOKUP_NUM_LIMBS, LOOKUP_SIZE};
     use anyhow::Result;
     use plonky2::field::goldilocks_field::GoldilocksField;
     use plonky2::gates::gate_testing::{test_eval_fns, test_low_degree};
     use plonky2::plonk::circuit_data::CircuitConfig;
     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
-    use crate::gates::base_sum_custom::BaseSumCustomGate;
-    use crate::monolith_hash::{LOOKUP_NUM_LIMBS, LOOKUP_SIZE};
 
     #[test]
     fn low_degree() {
-        test_low_degree::<GoldilocksField, _, 4>(BaseSumCustomGate::<{ LOOKUP_SIZE }>::new(LOOKUP_NUM_LIMBS, &CircuitConfig::standard_recursion_config()))
+        test_low_degree::<GoldilocksField, _, 4>(BaseSumCustomGate::<{ LOOKUP_SIZE }>::new(
+            LOOKUP_NUM_LIMBS,
+            &CircuitConfig::standard_recursion_config(),
+        ))
     }
 
     #[test]
@@ -383,6 +426,9 @@ mod tests {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        test_eval_fns::<F, C, _, D>(BaseSumCustomGate::<{ LOOKUP_SIZE }>::new(LOOKUP_NUM_LIMBS, &CircuitConfig::standard_recursion_config()))
+        test_eval_fns::<F, C, _, D>(BaseSumCustomGate::<{ LOOKUP_SIZE }>::new(
+            LOOKUP_NUM_LIMBS,
+            &CircuitConfig::standard_recursion_config(),
+        ))
     }
 }
