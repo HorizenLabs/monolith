@@ -9,7 +9,7 @@ authors = ["Markus Schofnegger", "Nicholas Mainardi"]
 keywords = ["cryptography", "PLONK", "hash", "zero_knowledge"]
 categories = ["cryptography"]
 repository = "https://github.com/HorizenLabs/monolith"
-
+exclude = ["ci/*", ".travis.yml", ".cargo/*"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
