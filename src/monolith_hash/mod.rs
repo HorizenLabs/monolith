@@ -37,7 +37,7 @@ pub const SPONGE_CAPACITY: usize = CUSTOM_SPONGE_CAPACITY;
 /// This is the number of elements which constitute the state of the internal permutation and the
 /// cryptographic sponge function built from this permutation.
 pub const SPONGE_WIDTH: usize = SPONGE_RATE + SPONGE_CAPACITY;
-/// Number of state elements involved in the `bars` layer
+/// Number of state elements involved in the `Bars` layer
 pub const NUM_BARS: usize = 4;
 
 // The number of full rounds and partial rounds is given by the
@@ -48,10 +48,10 @@ pub const NUM_BARS: usize = 4;
 // the precomputed constant arrays in this file.
 /// Number of rounds in Monolith permutations
 pub const N_ROUNDS: usize = 6;
-/// Bit-size of the domain of the function applied in the `bars` layer: a state element is split in
-/// limbs of `LOOKUP_BITS` bits, and a function is applied to each limb.
+/// Bit-size of the domain of the lookup function applied in the `Bars` layer: a state element is
+/// split in limbs of `LOOKUP_BITS` bits, and the lookup function is applied to each limb.
 pub const LOOKUP_BITS: usize = 8;
-/// Size of the domain of the function applied in the `bars` layer
+/// Size of the domain of the lookup function applied in the `Bars` layer
 pub const LOOKUP_SIZE: usize = 1 << LOOKUP_BITS;
 /// Number of limbs necessary to represent a 64-bit state element
 pub const LOOKUP_NUM_LIMBS: usize = 64 / LOOKUP_BITS;

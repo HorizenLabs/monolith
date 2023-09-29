@@ -2,7 +2,7 @@
 pub mod monolith;
 /// A gate employed to split a Goldilocks field element in limbs of
 /// [`crate::monolith_hash::LOOKUP_BITS`], which is necessary to apply the lookup table encoding the
-/// function to be applied in the `bars` layer; the same gate is also employed to reconstruct a
+/// function to be applied in the `Bars` layer; the same gate is also employed to reconstruct a
 /// Goldilocks field element from the limbs, after the evaluation of the lookup table to each limb.
 /// The gate works similarly to the Plonky2 `BaseSum` gate, but it is customized to be employed
 /// specifically for the Monolith permutation

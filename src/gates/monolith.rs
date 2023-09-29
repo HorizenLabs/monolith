@@ -57,7 +57,7 @@ impl<F: RichField + Extendable<D>, const D: usize> MonolithGate<F, D> {
     /// A wire which stores the output of the `i`-th Concrete of the `round`-th round
     pub fn wire_concrete_out(round: usize, i: usize) -> usize {
         // Configuration:
-        // 1 Brick_out for each state element
+        // 1 Concrete_out for each state element
         // 1 Bar_out for each state element which goes through Bars
         // = STATE_SIZE + NUM_BARS cells for each round
         match round {
