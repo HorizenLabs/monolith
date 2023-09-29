@@ -10,6 +10,7 @@ use plonky2::plonk::config::Hasher;
 
 use unroll::unroll_for_loops;
 
+/// Monolith implementation for Goldilocks prime field
 pub mod monolith_goldilocks;
 
 // change these values and disable `default-sponge-params` feature if it is needed to change the
@@ -19,8 +20,12 @@ const CUSTOM_SPONGE_RATE: usize = 8;
 #[cfg(not(feature = "default-sponge-params"))]
 const CUSTOM_SPONGE_CAPACITY: usize = 4;
 
+/// This constant describes the number of elements in the outer part of the cryptographic sponge
+/// function.
 #[cfg(feature = "default-sponge-params")]
 pub const SPONGE_RATE: usize = 8;
+/// This constant describes the number of elements in the inner part of the cryptographic sponge
+/// function.
 #[cfg(feature = "default-sponge-params")]
 pub const SPONGE_CAPACITY: usize = 4;
 
@@ -29,7 +34,10 @@ pub const SPONGE_RATE: usize = CUSTOM_SPONGE_RATE;
 #[cfg(not(feature = "default-sponge-params"))]
 pub const SPONGE_CAPACITY: usize = CUSTOM_SPONGE_CAPACITY;
 
+/// This is the number of elements which constitute the state of the internal permutation and the
+/// cryptographic sponge function built from this permutation.
 pub const SPONGE_WIDTH: usize = SPONGE_RATE + SPONGE_CAPACITY;
+/// Number of state elements involved in the `bars` layer
 pub const NUM_BARS: usize = 4;
 
 // The number of full rounds and partial rounds is given by the
@@ -38,9 +46,14 @@ pub const NUM_BARS: usize = 4;
 //
 // NB: Changing any of these values will require regenerating all of
 // the precomputed constant arrays in this file.
+/// Number of rounds in Monolith permutations
 pub const N_ROUNDS: usize = 6;
+/// Bit-size of the domain of the function applied in the `bars` layer: a state element is split in
+/// limbs of `LOOKUP_BITS` bits, and a function is applied to each limb.
 pub const LOOKUP_BITS: usize = 8;
+/// Size of the domain of the function applied in the `bars` layer
 pub const LOOKUP_SIZE: usize = 1 << LOOKUP_BITS;
+/// Number of limbs necessary to represent a 64-bit state element
 pub const LOOKUP_NUM_LIMBS: usize = 64 / LOOKUP_BITS;
 
 #[inline]
@@ -61,11 +74,16 @@ fn concrete_u128_with_tmp_buffer<M: Monolith>(state_u128: &[u128; SPONGE_WIDTH],
         res[row] = M::from_noncanonical_u96(split(res[row])).to_noncanonical_u64() as u128;
     }
 }
-
+/// `Monolith` trait provides all the functions necessary to perform a Monolith permutation
 pub trait Monolith: PrimeField64 {
     // Static data
+    /// Number of round constants employed in a full Monolith permutation
     const N_ROUND_CONSTANTS: usize = SPONGE_WIDTH * (N_ROUNDS + 1);
+    /// All the round constants employed in a full Monolith permutation
     const ROUND_CONSTANTS: [[u64; SPONGE_WIDTH]; N_ROUNDS + 1];
+    /// This constant contains the first row of a circulant `SPONGE_WIDTH x SPONGE_WIDTH` MDS matrix
+    /// M. All of the remaining rows of M are rotations of this constant vector. A multiplication
+    /// by M is used in the affine layer of Monolith.
     const MAT_12: [[u64; SPONGE_WIDTH]; SPONGE_WIDTH];
 
     /// Compute the "Bar" component
@@ -153,10 +171,11 @@ pub trait Monolith: PrimeField64 {
 
     /// Same as `bricks` optimized for u128
     /// Result is not reduced!
-    /// Use "& 0xFFFFFFFFFFFFFFFF" to tell the compiler it is dealing with 64-bit values (safe some instructions for upper half)
     #[unroll_for_loops]
     fn bricks_u128(state_u128: &mut [u128; SPONGE_WIDTH]) {
         // Feistel Type-3
+        // Use "& 0xFFFFFFFFFFFFFFFF" to tell the compiler it is dealing with 64-bit values (save
+        // some instructions for upper half)
         for i in (1..SPONGE_WIDTH).rev() {
             let prev = state_u128[i-1];
             let mut tmp_square = (prev & 0xFFFFFFFFFFFFFFFF_u128) * (prev & 0xFFFFFFFFFFFFFFFF_u128);
@@ -253,6 +272,7 @@ pub trait Monolith: PrimeField64 {
         state.copy_from_slice(&state_tmp);
     }
 
+    /// Full Monolith permutation
     #[inline]
     fn monolith(input: [Self; SPONGE_WIDTH]) -> [Self; SPONGE_WIDTH] {
         let mut state_u128 = [0; SPONGE_WIDTH];
@@ -277,6 +297,7 @@ pub trait Monolith: PrimeField64 {
 
 }
 
+/// Implementor of Plonky2 `PlonkyPermutation` trait for Monolith
 #[derive(Copy, Clone, Default, Debug, PartialEq)]
 pub struct MonolithPermutation<T> {
     state: [T; SPONGE_WIDTH],
@@ -345,6 +366,7 @@ for MonolithPermutation<T>
     }
 }
 
+/// Implementor of Plonky2 `Hasher` trait for Monolith
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct MonolithHash;
 impl<F: RichField + Monolith> Hasher<F> for MonolithHash {

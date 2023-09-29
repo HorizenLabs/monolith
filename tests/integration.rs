@@ -1,5 +1,5 @@
-use monolith::monolith_hash::MonolithHash;
-use monolith::{gates::generate_config_for_monolith_gate, monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig};
+use plonky2_monolith::monolith_hash::MonolithHash;
+use plonky2_monolith::{gates::generate_config_for_monolith_gate, monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig};
 use plonky2::field::{goldilocks_field::GoldilocksField, types::Sample};
 use plonky2::hash::hash_types::NUM_HASH_OUT_ELTS;
 use plonky2::plonk::circuit_builder::CircuitBuilder;

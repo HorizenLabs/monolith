@@ -19,8 +19,8 @@ use plonky2::util::serialization::{Buffer, IoResult, Read, Write};
 
 /// A gate which can decompose an element of `GoldilocksField` into base B little-endian limbs.
 /// This gate is customized to be used for lookups of the Monolith hash function, and thus it has
-/// the following differences w.r.t. the `BaseSum` gate:
-/// - It allows to pack many instances of a decomposition gate on a single row
+/// the following differences w.r.t. the Plonky2 `BaseSum` gate:
+/// - It allows to pack many decomposition operations on a single row
 /// - It does not range-check each limb, since the lookup table to be applied on each limb will
 /// already implicitly perform a range-check
 /// - It supports the decomposition of any field element, while the `BaseSum` gate unpacks only
@@ -41,19 +41,25 @@ fn log_ceil(n: u64, base: u64) -> usize {
 }
 
 impl<const B: usize> BaseSumCustomGate<B> {
+    /// Instantiate a new `BaseSumCustomGate` to decompose a Goldilocks field element in
+    /// `num_limbs` base B little-endian limbs. `config` allows to compute the number of operations
+    /// that can be performed with a single gate
     pub fn new(num_limbs: usize, config: &CircuitConfig) -> Self {
         let wires_per_op = Self::wires_per_op_from_limbs(num_limbs);
         let num_ops = config.num_routed_wires / wires_per_op;
+        assert!(num_ops > 0, "cannot decompose in {} limbs with {} routed wires", num_limbs, config.num_routed_wires);
         Self { num_limbs, num_ops }
     }
 
+    /// Instantiate a new `BaseSumCustomGate` employing the exact number of base B limbs necessary
+    /// to represent an arbitrary field element in `F`
     pub fn new_from_config<F: Field64>(config: &CircuitConfig) -> Self {
         let num_limbs = log_ceil(F::ORDER, B as u64).min(config.num_routed_wires - Self::START_LIMBS - 2);
         Self::new(num_limbs, config)
     }
 
-    pub const WIRE_SUM: usize = 0;
-    pub const START_LIMBS: usize = 1;
+    const WIRE_SUM: usize = 0;
+    const START_LIMBS: usize = 1;
 
     fn wires_per_op_from_limbs(num_limbs: usize) -> usize {
         // num limbs + 1 wire for the element to be decomposed + 2 wires to range-check the
@@ -65,12 +71,14 @@ impl<const B: usize> BaseSumCustomGate<B> {
         Self::wires_per_op_from_limbs(self.num_limbs)
     }
 
+    /// Index of the wire storing the field element to be decomposed in the `i`-th operation of the
+    /// gate
     pub fn ith_wire_sum(&self, i: usize) -> usize {
         let wires_per_op = self.wires_per_op();
         i * wires_per_op + Self::WIRE_SUM
     }
 
-    /// Returns the index of the limb wires for i-th op.
+    /// Returns the index of the limb wires for the i-th operation of the gate.
     pub fn ith_limbs(&self, i: usize) -> Range<usize> {
         let wires_per_op = self.wires_per_op();
         (i * wires_per_op + Self::START_LIMBS)..(i * wires_per_op + Self::START_LIMBS + self.num_limbs)
@@ -250,7 +258,8 @@ for BaseSumCustomGate<B>
         }
     }
 }
-
+/// Generator for each operation performed in a `BaseSumCustomGate`: it computes the limb
+/// decomposition of the field element to be decomposed in the given operation
 #[derive(Debug, Default)]
 pub struct BaseSplitGenerator<const B: usize> {
     row: usize,

@@ -6,7 +6,7 @@ use plonky2::hash::keccak::KeccakHash;
 use plonky2::hash::merkle_tree::MerkleTree;
 use plonky2::hash::poseidon::PoseidonHash;
 use plonky2::plonk::config::Hasher;
-use monolith::monolith_hash::MonolithHash;
+use plonky2_monolith::monolith_hash::MonolithHash;
 
 mod allocator;
 

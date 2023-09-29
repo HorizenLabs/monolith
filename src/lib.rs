@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 #![doc = include_str!("../README.md")]
  
 /// Implementation of Monolith hash function and data structures to employ it in Plonky2
