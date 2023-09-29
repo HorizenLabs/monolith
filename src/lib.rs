@@ -1,4 +1,5 @@
 #![warn(missing_docs)]
+#![allow(clippy::needless_range_loop)]
 
 #![doc = include_str!("../README.md")]
  

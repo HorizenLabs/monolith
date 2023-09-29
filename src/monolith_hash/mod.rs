@@ -232,7 +232,7 @@ pub trait Monolith: PrimeField64 {
 
     /// Same as `concrete` optimized for u128
     fn concrete_u128(state_u128: &mut [u128; SPONGE_WIDTH], round_constants: &[u64; SPONGE_WIDTH]) {
-        let mut state_tmp = [0 as u128; SPONGE_WIDTH];
+        let mut state_tmp = [0_u128; SPONGE_WIDTH];
         concrete_u128_with_tmp_buffer::<Self>(state_u128, round_constants, &mut state_tmp);
         state_u128.copy_from_slice(&state_tmp);
     }
@@ -280,11 +280,11 @@ pub trait Monolith: PrimeField64 {
             *out = inp.to_noncanonical_u64() as u128;
         }
 
-        Self::concrete_u128(&mut state_u128, &Self::ROUND_CONSTANTS[0].try_into().unwrap());
+        Self::concrete_u128(&mut state_u128, &Self::ROUND_CONSTANTS[0]);
         for rc in Self::ROUND_CONSTANTS.iter().skip(1) {
             Self::bars_u128(&mut state_u128);
             Self::bricks_u128(&mut state_u128);
-            Self::concrete_u128(&mut state_u128, rc.try_into().unwrap());
+            Self::concrete_u128(&mut state_u128, rc);
         }
 
         // Convert back

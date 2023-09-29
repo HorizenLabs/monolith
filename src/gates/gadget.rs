@@ -46,7 +46,7 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> SplitAndLooku
         // Get final output target (compose)
         let limbs = split_targets_out;
 
-        let (row, i) = self.find_slot(gate_type, &[F::from_canonical_usize(num_limbs)],&vec![]);
+        let (row, i) = self.find_slot(gate_type, &[F::from_canonical_usize(num_limbs)],&[]);
         for (limb, wire) in limbs
             .iter()
             .zip(gate_type.ith_limbs(i))
@@ -160,7 +160,7 @@ pub(crate) fn add_monolith_lookup_table<F: RichField + Extendable<D>, const D:us
         builder.add_lookup_from_index(zero, fake_idx);
         let inp_table: [u16; LOOKUP_SIZE] = core::array::from_fn(|i| i as u16);
         let idx = builder.add_lookup_table_from_fn(|i| {
-            let limb = i as u16;
+            let limb = i;
             match LOOKUP_BITS {
                 8 => {
                     let limbl1 = ((!limb & 0x80) >> 7) | ((!limb & 0x7F) << 1); // Left rotation by 1

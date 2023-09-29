@@ -243,10 +243,10 @@ for BaseSumCustomGate<B>
 
             let base = F::from_canonical_usize(B);
             let half_len = limbs.len()/2;
-            let a = (0..half_len-1).into_iter().rev().fold(limbs[half_len-1], |acc, i| {
+            let a = (0..half_len-1).rev().fold(limbs[half_len-1], |acc, i| {
                 acc*base + limbs[i]
             });
-            let temp = (half_len..limbs.len()-1).into_iter().rev().fold(limbs[limbs.len()-1], |acc, i| {
+            let temp = (half_len..limbs.len()-1).rev().fold(limbs[limbs.len()-1], |acc, i| {
                 acc*base + limbs[i]
             });
             let b = temp - z;
@@ -336,13 +336,12 @@ for BaseSplitGenerator<B>
             acc*base + *el
         });
 
-        let z_field: F;
-        if a == F::ZERO {
-            z_field = F::ONE;
+        let z_field = if a == F::ZERO {
+            F::ONE
         }
         else {
-            z_field = b;
-        }
+            b
+        };
         let z_prime_field = F::inverse(&(z_field - F::from_canonical_u64(1_u64 << 32) + F::ONE))*z_field;
         out_buffer.set_target(self.boundary_constraints_wires()[0], z_field);
         out_buffer.set_target(self.boundary_constraints_wires()[1], z_prime_field);
