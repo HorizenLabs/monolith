@@ -329,8 +329,7 @@ pub(crate) mod tests {
             let mut timing = TimingTree::new("prove", Level::Debug);
             let proof = prove(&data.prover_only, &data.common, pw, &mut timing)?;
             timing.print();
-            let proof_bytes = serde_cbor::to_vec(&proof).unwrap();
-            info!("proof size: {}", proof_bytes.len());
+            info!("proof size: {}", proof.to_bytes().len());
             proof
         } else {
             data.prove(pw)?

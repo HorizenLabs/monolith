@@ -26,7 +26,6 @@ default-sponge-params = []
 
 [dev-dependencies]
 log = "0.4.20"
-serde_cbor = "0.11.2"
 rstest = "0.18.2"
 serial_test = "2.0.0"
 env_logger = "0.10.0"

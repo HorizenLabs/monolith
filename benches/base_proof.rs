@@ -66,8 +66,7 @@ fn bench_base_proof<
 
         let proof = base_circuit.generate_base_proof(F::rand()).unwrap();
 
-        let serialized_proof = serde_cbor::to_vec(&proof).unwrap();
-        pretty_print!("proof size: {}", serialized_proof.len());
+        pretty_print!("proof size: {}", proof.to_bytes().len());
 
         group.bench_function(
             format!("verify circuit with 2^{} hashes", log_num_hashes).as_str(),
