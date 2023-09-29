@@ -14,16 +14,20 @@ use crate::gates::base_sum_custom::{BaseSplitGenerator, BaseSumCustomGate};
 use crate::gates::monolith::MonolithGate;
 use crate::monolith_hash::{LOOKUP_BITS, LOOKUP_NUM_LIMBS, LOOKUP_SIZE, Monolith, MonolithHash, MonolithPermutation, N_ROUNDS, NUM_BARS, SPONGE_WIDTH};
 
-pub trait SplitAndLookup {
-    /// 1) Split the given element into a list of targets, where each one represents a
-    /// base-B limb of the element, with little-endian ordering
-    /// 2) Applies the lookup argument to these targets
-    /// 3) Composes the final target using the outputs of the lookup argument
-    fn split_le_lookup<const B: usize>(&mut self, x: Target, num_limbs: usize, lut_index: usize) -> Target;
+/// `SplitAndLookup` provides a method to perform the following operation in a Plonky2 circuit:
+/// 1) Split the input element into a list of targets, where each one represents a
+/// base B limb of the element, with little-endian ordering
+/// 2) Applies a lookup table (which should be defined only over base B input values) to each element
+/// 3) Composes the final target using the outputs of the lookup table
+pub trait SplitAndLookup<const B: usize> {
+    /// Split and lookup functionality: `x` is the input element, `num_limbs` the number of base `B`
+    /// limbs `x` has to be split into, and `lut_index` identifies the lookup table to be applied,
+    /// which is assumed to have been already added to the set of lookup tables of the circuit
+    fn split_le_lookup(&mut self, x: Target, num_limbs: usize, lut_index: usize) -> Target;
 }
 
-impl<F: RichField + Extendable<D>, const D: usize> SplitAndLookup for CircuitBuilder<F, D> {
-    fn split_le_lookup<const B: usize>(&mut self, x: Target, num_limbs: usize, lut_index: usize) -> Target {
+impl<F: RichField + Extendable<D>, const D: usize, const B: usize> SplitAndLookup<B> for CircuitBuilder<F, D> {
+    fn split_le_lookup(&mut self, x: Target, num_limbs: usize, lut_index: usize) -> Target {
 
         // Split into individual targets (decompose)
         let gate_type = BaseSumCustomGate::<B>::new(num_limbs, &self.config);
@@ -42,7 +46,7 @@ impl<F: RichField + Extendable<D>, const D: usize> SplitAndLookup for CircuitBui
         // Get final output target (compose)
         let limbs = split_targets_out;
 
-        let (row, i) = self.find_slot(gate_type, &[F::from_canonical_usize(num_limbs)],&vec![]);
+        let (row, i) = self.find_slot(gate_type, &[F::from_canonical_usize(num_limbs)],&[]);
         for (limb, wire) in limbs
             .iter()
             .zip(gate_type.ith_limbs(i))
@@ -126,7 +130,7 @@ impl<F: RichField + Monolith> AlgebraicHasher<F> for MonolithHash {
             for i in 0..NUM_BARS {
                 let target_input: Target = Target::wire(gate, MonolithGate::<F, D>::wire_concrete_out(round_ctr, i));
                 let target_output = Target::wire(gate, MonolithGate::<F, D>::wire_bars_out(round_ctr, i));
-                let target_should = builder.split_le_lookup::<LOOKUP_SIZE>(target_input, LOOKUP_NUM_LIMBS, lut_index); // Assumes a single lookup table
+                let target_should = SplitAndLookup::<LOOKUP_SIZE>::split_le_lookup(builder, target_input, LOOKUP_NUM_LIMBS, lut_index); // Assumes a single lookup table
                 builder.connect(target_output, target_should);
             }
         }
@@ -156,7 +160,7 @@ pub(crate) fn add_monolith_lookup_table<F: RichField + Extendable<D>, const D:us
         builder.add_lookup_from_index(zero, fake_idx);
         let inp_table: [u16; LOOKUP_SIZE] = core::array::from_fn(|i| i as u16);
         let idx = builder.add_lookup_table_from_fn(|i| {
-            let limb = i as u16;
+            let limb = i;
             match LOOKUP_BITS {
                 8 => {
                     let limbl1 = ((!limb & 0x80) >> 7) | ((!limb & 0x7F) << 1); // Left rotation by 1

@@ -17,10 +17,12 @@ use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::plonk::circuit_data::CircuitConfig;
 use plonky2::field::types::Sample;
 use plonky2::iop::witness::WitnessWrite;
-use monolith::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
+use plonky2_monolith::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
+use std::error::Error;
 
-    const D: usize = 2;
-    type F = GoldilocksField;
+const D: usize = 2;
+type F = GoldilocksField;
+fn main() -> Result<(), Box<dyn Error>> {
     let config = CircuitConfig::standard_recursion_config();
     let mut builder = CircuitBuilder::<F, D>::new(config);
     let init_t = builder.add_virtual_public_input();
@@ -37,9 +39,10 @@ use monolith::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
     pw.set_target(init_t, input);
 
 
-    let proof = data.prove(pw).unwrap();
+    let proof = data.prove(pw)?;
 
-    data.verify(proof).unwrap();
+    Ok(data.verify(proof)?)
+}
 ```
 Build a circuit employing Monolith gate:
 ```rust
@@ -52,9 +55,10 @@ use plonky2::field::types::Sample;
 use plonky2::iop::witness::WitnessWrite;
 use plonky2::gates::gate::Gate;
 use plonky2::hash::hash_types::NUM_HASH_OUT_ELTS;
-use monolith::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
-use monolith::gates::monolith::MonolithGate;
-use monolith::monolith_hash::MonolithHash;
+use plonky2_monolith::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
+use plonky2_monolith::gates::monolith::MonolithGate;
+use plonky2_monolith::monolith_hash::MonolithHash;
+use std::error::Error;
 
 const D: usize = 2;
 type F = GoldilocksField;
@@ -68,24 +72,26 @@ fn generate_config_for_monolith() -> CircuitConfig {
         }
     }
 
-let config = generate_config_for_monolith();
-let mut builder = CircuitBuilder::<F, D>::new(config);
-let inp_targets_array = builder.add_virtual_target_arr::<{NUM_HASH_OUT_ELTS}>();
-let mut res_targets_array = inp_targets_array.clone();
-for _ in 0..100 {
-    res_targets_array = builder.hash_or_noop::<MonolithHash>(res_targets_array.to_vec()).elements;
+fn main() -> Result<(), Box<dyn Error>> {
+    let config = generate_config_for_monolith();
+    let mut builder = CircuitBuilder::<F, D>::new(config);
+    let inp_targets_array = builder.add_virtual_target_arr::<{NUM_HASH_OUT_ELTS}>();
+    let mut res_targets_array = inp_targets_array.clone();
+    for _ in 0..100 {
+        res_targets_array = builder.hash_or_noop::<MonolithHash>(res_targets_array.to_vec()).elements;
+    }
+    builder.register_public_inputs(&res_targets_array);
+    let data = builder.build::<MonolithGoldilocksConfig>();
+    
+    
+    let mut pw = PartialWitness::<F>::new();
+    inp_targets_array.into_iter().for_each(|t| {
+        let input = F::rand();
+        pw.set_target(t, input); 
+    });
+    
+    let proof = data.prove(pw)?;
+    
+    Ok(data.verify(proof)?)
 }
-builder.register_public_inputs(&res_targets_array);
-let data = builder.build::<MonolithGoldilocksConfig>();
-
-
-let mut pw = PartialWitness::<F>::new();
-inp_targets_array.into_iter().for_each(|t| {
-    let input = F::rand();
-    pw.set_target(t, input); 
-});
-
-let proof = data.prove(pw).unwrap();
-
-data.verify(proof).unwrap();
 ```

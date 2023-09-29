@@ -1,5 +1,5 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use monolith::gates::generate_config_for_monolith_gate;
+use plonky2_monolith::gates::generate_config_for_monolith_gate;
 use plonky2::field::extension::Extendable;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::hash::hash_types::RichField;
@@ -7,8 +7,8 @@ use plonky2::hash::poseidon::PoseidonHash;
 use plonky2::plonk::circuit_data::CircuitConfig;
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, Hasher, PoseidonGoldilocksConfig};
 use tynm::type_name;
-use monolith::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
-use monolith::monolith_hash::{Monolith, MonolithHash};
+use plonky2_monolith::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
+use plonky2_monolith::monolith_hash::{Monolith, MonolithHash};
 use crate::circuits::BaseCircuit;
 
 mod circuits;

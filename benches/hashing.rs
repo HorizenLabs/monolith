@@ -8,7 +8,7 @@ use plonky2::hash::poseidon::{Poseidon, SPONGE_WIDTH};
 use plonky2::plonk::config::Hasher;
 use rand_chacha::ChaCha12Rng;
 use rand_chacha::rand_core::SeedableRng;
-use monolith::monolith_hash::Monolith;
+use plonky2_monolith::monolith_hash::Monolith;
 
 mod allocator;
 

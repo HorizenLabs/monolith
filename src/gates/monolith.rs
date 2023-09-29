@@ -21,10 +21,11 @@ use crate::monolith_hash::{Monolith, N_ROUNDS, NUM_BARS, SPONGE_WIDTH};
 /// This also has some extra features to make it suitable for efficiently verifying Merkle proofs.
 /// It has a flag which can be used to swap the first four inputs with the next four, for ordering
 /// sibling digests.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct MonolithGate<F: RichField + Extendable<D>, const D: usize>(PhantomData<F>);
 
 impl<F: RichField + Extendable<D>, const D: usize> MonolithGate<F, D> {
+    /// Instantiate a new `MonolithGate`
     pub fn new() -> Self {
         Self(PhantomData)
     }
@@ -53,13 +54,12 @@ impl<F: RichField + Extendable<D>, const D: usize> MonolithGate<F, D> {
 
     const START_PERM: usize = Self::START_DELTA + 4;
 
-    /// Configuration:
-    /// 1 Brick_out for each state element
-    /// 1 Bar_out for each state element which goes through Bars
-    /// = STATE_SIZE + NUM_BARS cells for each round
-
     /// A wire which stores the output of the `i`-th Concrete of the `round`-th round
     pub fn wire_concrete_out(round: usize, i: usize) -> usize {
+        // Configuration:
+        // 1 Concrete_out for each state element
+        // 1 Bar_out for each state element which goes through Bars
+        // = STATE_SIZE + NUM_BARS cells for each round
         match round {
             0 => {
                 debug_assert!(round == 0);
@@ -319,7 +319,8 @@ impl<F: RichField + Extendable<D> + Monolith, const D: usize> Gate<F, D> for Mon
     }
 }
 
-#[derive(Debug, Default)]
+/// Generator for `MonolithGate` wires
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct MonolithGenerator<F: RichField + Extendable<D> + Monolith, const D: usize> {
     row: usize,
     _phantom: PhantomData<F>,
