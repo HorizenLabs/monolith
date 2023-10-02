@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use crate::monolith_hash::{Monolith, NUM_BARS, N_ROUNDS, SPONGE_WIDTH};
 use itertools::Itertools;
 use plonky2::field::extension::Extendable;
 use plonky2::field::types::Field;
@@ -14,7 +14,7 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::circuit_data::CommonCircuitData;
 use plonky2::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
 use plonky2::util::serialization::{Buffer, IoResult, Read, Write};
-use crate::monolith_hash::{Monolith, N_ROUNDS, NUM_BARS, SPONGE_WIDTH};
+use std::marker::PhantomData;
 
 /// Evaluates a full Monolith permutation with 12 state elements.
 ///
@@ -65,12 +65,12 @@ impl<F: RichField + Extendable<D>, const D: usize> MonolithGate<F, D> {
                 debug_assert!(round == 0);
                 debug_assert!(i < NUM_BARS);
                 Self::START_PERM + i
-            },
+            }
             _ => {
                 debug_assert!(round > 0);
                 debug_assert!(i < SPONGE_WIDTH);
                 Self::START_PERM + (NUM_BARS * 2) + (SPONGE_WIDTH + NUM_BARS) * (round - 1) + i
-            },
+            }
         }
     }
 
@@ -134,11 +134,10 @@ impl<F: RichField + Extendable<D> + Monolith, const D: usize> Gate<F, D> for Mon
         // Permutation
         <F as Monolith>::concrete_field(&mut state, &<F as Monolith>::ROUND_CONSTANTS[0]);
         for (round_ctr, rc) in <F as Monolith>::ROUND_CONSTANTS.iter().skip(1).enumerate() {
-
             // Check values after Concrete and set new state after applying bars
             let loop_end = match round_ctr {
                 0 => NUM_BARS,
-                _ => SPONGE_WIDTH
+                _ => SPONGE_WIDTH,
             };
             for i in 0..loop_end {
                 let concrete_out = vars.local_wires[Self::wire_concrete_out(round_ctr, i)];
@@ -197,9 +196,11 @@ impl<F: RichField + Extendable<D> + Monolith, const D: usize> Gate<F, D> for Mon
         // Permutation
         <F as Monolith>::concrete(&mut state, &<F as Monolith>::ROUND_CONSTANTS[0]);
         for (round_ctr, rc) in <F as Monolith>::ROUND_CONSTANTS.iter().skip(1).enumerate() {
-
             // Check values after Concrete and set new state after applying bars
-            let loop_end = match round_ctr { 0 => NUM_BARS, _ => SPONGE_WIDTH };
+            let loop_end = match round_ctr {
+                0 => NUM_BARS,
+                _ => SPONGE_WIDTH,
+            };
             for i in 0..loop_end {
                 let concrete_out = vars.local_wires[Self::wire_concrete_out(round_ctr, i)];
                 yield_constr.one(state[i] - concrete_out);
@@ -227,7 +228,6 @@ impl<F: RichField + Extendable<D> + Monolith, const D: usize> Gate<F, D> for Mon
         builder: &mut CircuitBuilder<F, D>,
         vars: EvaluationTargets<D>,
     ) -> Vec<ExtensionTarget<D>> {
-
         let mut constraints = Vec::with_capacity(self.num_constraints());
 
         // Assert that `swap` is binary.
@@ -257,11 +257,17 @@ impl<F: RichField + Extendable<D> + Monolith, const D: usize> Gate<F, D> for Mon
         }
 
         // Permutation
-        <F as Monolith>::concrete_circuit(builder, &mut state, &<F as Monolith>::ROUND_CONSTANTS[0]);
+        <F as Monolith>::concrete_circuit(
+            builder,
+            &mut state,
+            &<F as Monolith>::ROUND_CONSTANTS[0],
+        );
         for (round_ctr, rc) in <F as Monolith>::ROUND_CONSTANTS.iter().skip(1).enumerate() {
-
             // Check values after Concrete and set new state after applying bars
-            let loop_end = match round_ctr { 0 => NUM_BARS, _ => SPONGE_WIDTH };
+            let loop_end = match round_ctr {
+                0 => NUM_BARS,
+                _ => SPONGE_WIDTH,
+            };
             for i in 0..loop_end {
                 let concrete_out = vars.local_wires[Self::wire_concrete_out(round_ctr, i)];
                 constraints.push(builder.sub_extension(state[i], concrete_out));
@@ -285,7 +291,8 @@ impl<F: RichField + Extendable<D> + Monolith, const D: usize> Gate<F, D> for Mon
 
         // Final
         for i in 0..SPONGE_WIDTH {
-            constraints.push(builder.sub_extension(state[i], vars.local_wires[Self::wire_output(i)]));
+            constraints
+                .push(builder.sub_extension(state[i], vars.local_wires[Self::wire_output(i)]));
         }
 
         constraints
@@ -312,10 +319,7 @@ impl<F: RichField + Extendable<D> + Monolith, const D: usize> Gate<F, D> for Mon
     }
 
     fn num_constraints(&self) -> usize {
-        NUM_BARS + SPONGE_WIDTH * (N_ROUNDS - 1)
-            + SPONGE_WIDTH
-            + 1
-            + 4
+        NUM_BARS + SPONGE_WIDTH * (N_ROUNDS - 1) + SPONGE_WIDTH + 1 + 4
     }
 }
 
@@ -327,7 +331,7 @@ pub struct MonolithGenerator<F: RichField + Extendable<D> + Monolith, const D: u
 }
 
 impl<F: RichField + Extendable<D> + Monolith, const D: usize> WitnessGenerator<F, D>
-for MonolithGenerator<F, D>
+    for MonolithGenerator<F, D>
 {
     fn id(&self) -> String {
         "MonolithGenerator".to_string()
@@ -338,9 +342,9 @@ for MonolithGenerator<F, D>
             .map(|i| MonolithGate::<F, D>::wire_input(i))
             .chain(Some(MonolithGate::<F, D>::WIRE_SWAP))
             .chain(
-                (0..N_ROUNDS).cartesian_product(0..NUM_BARS).map(
-                    |(round, i)| MonolithGate::<F,D>::wire_bars_out(round,i)
-                )
+                (0..N_ROUNDS)
+                    .cartesian_product(0..NUM_BARS)
+                    .map(|(round, i)| MonolithGate::<F, D>::wire_bars_out(round, i)),
             )
             .map(|column| Target::wire(self.row, column))
             .collect()
@@ -357,14 +361,15 @@ for MonolithGenerator<F, D>
             .collect::<Vec<_>>();
         // exit if some of the input wires have not been already computed
         if state.len() < SPONGE_WIDTH {
-            return false
+            return false;
         }
 
-        let swap_value = if let Some(wire) = witness.try_get_wire(local_wire(MonolithGate::<F, D>::WIRE_SWAP)) {
-            wire
-        } else {
-            return false
-        };
+        let swap_value =
+            if let Some(wire) = witness.try_get_wire(local_wire(MonolithGate::<F, D>::WIRE_SWAP)) {
+                wire
+            } else {
+                return false;
+            };
         debug_assert!(swap_value == F::ZERO || swap_value == F::ONE);
 
         for i in 0..4 {
@@ -383,9 +388,11 @@ for MonolithGenerator<F, D>
         // Permutation
         <F as Monolith>::concrete_field(&mut state, &<F as Monolith>::ROUND_CONSTANTS[0]);
         for (round_ctr, rc) in <F as Monolith>::ROUND_CONSTANTS.iter().skip(1).enumerate() {
-
             // Set values after Concrete
-            let loop_end = match round_ctr { 0 => NUM_BARS, _ => SPONGE_WIDTH };
+            let loop_end = match round_ctr {
+                0 => NUM_BARS,
+                _ => SPONGE_WIDTH,
+            };
             for i in 0..loop_end {
                 out_buffer.set_wire(
                     local_wire(MonolithGate::<F, D>::wire_concrete_out(round_ctr, i)),
@@ -395,11 +402,11 @@ for MonolithGenerator<F, D>
 
             // Get values after Bars (this assumes lookups have already been applied, i.e., these are the outputs of Bars)
             for i in 0..NUM_BARS {
-                state[i] = match witness.try_get_wire(local_wire(MonolithGate::<F, D>::wire_bars_out(round_ctr, i))){
+                state[i] = match witness.try_get_wire(local_wire(
+                    MonolithGate::<F, D>::wire_bars_out(round_ctr, i),
+                )) {
                     Some(value) => value,
-                    None => {
-                        return false
-                    },
+                    None => return false,
                 };
             }
 
@@ -431,11 +438,11 @@ for MonolithGenerator<F, D>
 
 #[cfg(test)]
 mod tests {
+    use crate::gates::monolith::MonolithGate;
+    use crate::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
     use plonky2::field::goldilocks_field::GoldilocksField;
     use plonky2::gates::gate_testing::{test_eval_fns, test_low_degree};
     use plonky2::plonk::config::GenericConfig;
-    use crate::gates::monolith::MonolithGate;
-    use crate::monolith_hash::monolith_goldilocks::MonolithGoldilocksConfig;
 
     #[test]
     fn wire_indices() {

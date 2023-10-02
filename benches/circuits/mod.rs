@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use anyhow::Result;
 use plonky2::field::extension::Extendable;
 use plonky2::hash::hash_types::RichField;
@@ -9,6 +8,7 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::circuit_data::{CircuitConfig, CircuitData};
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, Hasher};
 use plonky2::plonk::proof::ProofWithPublicInputs;
+use std::marker::PhantomData;
 
 /// Data structure with all input/output targets and the `CircuitData` for the circuit proven
 /// in base proofs. The circuit is designed to be representative of a common base circuit
@@ -30,11 +30,11 @@ pub struct BaseCircuit<
 }
 
 impl<
-    F: RichField + Extendable<D>,
-    C: GenericConfig<D, F = F>,
-    const D: usize,
-    H: Hasher<F> + AlgebraicHasher<F>,
-> BaseCircuit<F, C, D, H>
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        const D: usize,
+        H: Hasher<F> + AlgebraicHasher<F>,
+    > BaseCircuit<F, C, D, H>
 {
     pub fn build_base_circuit(config: CircuitConfig, log_num_hashes: usize) -> Self {
         let num_hashes: usize = 1usize << log_num_hashes;
@@ -46,8 +46,7 @@ impl<
         let to_be_hashed_t = builder.add_virtual_target();
         for _ in 0..num_hashes {
             res_t = builder.mul(res_t, init_t);
-            res_t =
-                builder.hash_n_to_m_no_pad::<H>(vec![res_t, to_be_hashed_t, zero, zero], 1)[0];
+            res_t = builder.hash_n_to_m_no_pad::<H>(vec![res_t, to_be_hashed_t, zero, zero], 1)[0];
         }
 
         let out_t = builder.add_virtual_public_input();
@@ -75,10 +74,9 @@ impl<
         let mut res = init;
         for _ in 0..self.num_powers {
             res = res.mul(init);
-            res = hash_n_to_m_no_pad::<_, H::Permutation>(
-                &[res, to_be_hashed, F::ZERO, F::ZERO],
-                1,
-            )[0];
+            res =
+                hash_n_to_m_no_pad::<_, H::Permutation>(&[res, to_be_hashed, F::ZERO, F::ZERO], 1)
+                    [0];
         }
 
         pw.set_target(self.public_output, res);
